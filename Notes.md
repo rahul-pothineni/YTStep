@@ -1,17 +1,19 @@
 Purpose - 
 I was curious to see how when you search for a video on google it gets the exact timestamps where your question was asked. I wanted to implement this a little deeper however. When I am doing research or learning about a topic I find that LLMs struggle to respond with contextualized videos of what I truly am asking for. 
 
-Goal - 
+Goal -
 
-I will create a multi-agent loop that will ask the user a multitude of questions before going off and searching.
+An orchestrator agent takes in the user's query and passes it off to a series of sub-agents:
 
-Have an orchestrator agent take in the users query → pass it off to 2… At the end with all information accumulated (video links + timestamps and summaries)
-Have an agent evaluate the user's query and check if the provided information is relevant enough to step into 3 or not. If not comes up with questions to ask (this runs in a loop until this agent is satisfied with some cap k) 
-Another agent that takes the information gathered and searches youtube for potential videos and lists potential videos. 
-An agent that looks through the video (gemini api + local caching for requeries), length, and specific timestamps (if requested) of these videos and chooses the best ones for the users requests.
-Check the results of 4 vs. the constraints from 2 and relevance. Run in a loop with cap k or we pass the constraints and relevance. 
+1. **Query Evaluation Agent** — Evaluates the user's query and checks if there's enough information to search YouTube. If not, it comes up with clarifying questions to ask the user. This runs in a loop until the agent is satisfied (with a cap of k retries, after which it forces forward with whatever info it has).
 
-At the end of each subagents task it will provide their results and summary of their work to the next agent and the orchestrator. 
+2. **Search Agent** — Takes the refined information from the query evaluation and searches YouTube for potential videos using the YouTube Data API. Only returns videos from channels with 10k+ subscribers and within the requested duration range. On retries, it excludes previously rejected video IDs.
+
+3. **Video Analyzer** — Looks through each video using the Gemini API (with session caching for re-queries) and fetches the top 50 comments for sentiment analysis. Both tasks run in parallel per video. Extracts summaries, relevant timestamps, and audience reception. Only videos that pass the relevance check get cached.
+
+4. **Relevance Check Agent** — Checks the results from step 3 against the constraints from step 1 — is the video actually on topic? Are the comments mostly negative? Is it way too long for what the user wanted? Videos that don't pass get rejected with a reason, and the system loops back to the Search Agent to find replacements (with a cap of k retries). Videos that pass get returned to the orchestrator with their summaries, timestamps, and sentiment.
+
+At the end, with all information accumulated (video links, timestamps, summaries, and comment sentiment), the orchestrator presents the results to the user. Each sub-agent provides its results and summary of work to the next agent and the orchestrator.
 
 Problem: Video summarization via Gemini API takes too long. 
 
