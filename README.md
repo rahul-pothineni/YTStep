@@ -1,4 +1,6 @@
 # About:
+Currently a work in progress.
+
 Check out the Notes.md file for more information about the motivation.
 
 # System Architecture: 
