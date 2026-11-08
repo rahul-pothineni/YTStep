@@ -1,6 +1,12 @@
 from google.adk.agents import Agent
 
-from .tools import finalize_query, record_clarification, search_youtube
+from .tools import (
+    analyze_all_sentiments,
+    finalize_query,
+    record_clarification,
+    search_youtube,
+    summarize_all_videos,
+)
 
 query_eval_agent = Agent(
     name="query_eval_agent",
@@ -44,13 +50,38 @@ When you're called:
    desired length, and any extra constraints the user mentioned.
 2. Come up with a good YouTube search query from that info. Be specific — include
    key terms that will help find the right kind of video.
-3. Call the search_youtube tool with your query.
-4. Once you get results, present them to the user in a friendly way — share the
-   video titles, channels, and links. Keep it casual and helpful.
-5. Transfer back to the orchestrator when you're done.
+3. Call the search_youtube tool with your query. If the user mentioned a desired
+   video length, translate that into min_duration_minutes and max_duration_minutes.
+   For example, if they said "around 20 minutes", use min=10 and max=30. If they
+   said "short", use max=10. If they didn't mention length, leave the defaults.
+   The tool enforces a hard 2-hour max no matter what.
+4. Once you get results, do NOT present them to the user. Just transfer back to
+   the orchestrator right away — another agent will handle showing the results.
 """,
     tools=[search_youtube],
     output_key="search_results",
+)
+
+video_summarizer_agent = Agent(
+    name="video_summarizer_agent",
+    model="gemini-3.5-flash-lite",
+    instruction="""\
+You summarize YouTube videos so the user can pick the best one.
+Talk like a friendly, casual person — no jargon or tech speak.
+
+When you're called:
+1. Call BOTH tools at the same time — summarize_all_videos and
+   analyze_all_sentiments. They each read search results from state and work
+   in parallel.
+2. Once both come back, present the results to the user in a friendly way.
+   For each video, share:
+   - The title, channel, and duration
+   - A summary of what the video covers
+   - What the comments say — is it well-received? Any common praise or complaints?
+3. Transfer back to the orchestrator when you're done.
+""",
+    tools=[summarize_all_videos, analyze_all_sentiments],
+    output_key="video_summaries",
 )
 
 root_agent = Agent(
@@ -65,11 +96,14 @@ When someone asks you to find a video:
    user is looking for.
 2. When query_eval_agent is done and comes back, immediately transfer to
    search_agent to search YouTube.
-3. When search_agent comes back with results, present them to the user in a
-   friendly, easy-to-read way. Share the video titles, channels, and links.
+3. When search_agent comes back with results, immediately transfer to
+   video_summarizer_agent so it can summarize each video.
+4. When video_summarizer_agent comes back with summaries, present everything to
+   the user — video titles, channels, durations, links, and what each video
+   covers. Keep it friendly and easy to read.
 
 Keep the conversation natural. If something goes wrong (like no results found),
 let the user know and offer to try a different search.
 """,
-    sub_agents=[query_eval_agent, search_agent],
+    sub_agents=[query_eval_agent, search_agent, video_summarizer_agent],
 )
