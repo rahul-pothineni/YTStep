@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 
-from ..tools import analyze_all_sentiments, summarize_all_videos
+from .tools.video_summarizer import analyze_all_sentiments, summarize_all_videos
 
 video_summarizer_agent = Agent(
     name="video_summarizer_agent",

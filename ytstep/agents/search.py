@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 
-from ..tools import search_youtube
+from .tools.search import search_youtube
 
 search_agent = Agent(
     name="search_agent",

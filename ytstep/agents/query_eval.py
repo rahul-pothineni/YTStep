@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 
-from ..tools import finalize_query, record_clarification
+from .tools.query_eval import finalize_query, record_clarification
 
 query_eval_agent = Agent(
     name="query_eval_agent",
