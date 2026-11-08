@@ -35,8 +35,9 @@ def _get_video_comments(api_key: str, video_id: str, max_comments: int = 50) -> 
 def summarize_all_videos(ctx: Context) -> dict:
     """Summarize all videos from search_results using the Gemini API.
 
-    Processes all videos in parallel. On a cache miss, both summary and
-    sentiment are computed together and cached as one entry.
+    Checks the cache first — previously approved videos are served from cache.
+    Cache misses are processed in parallel via Gemini. Results are stored in
+    pending_summaries for the relevance check agent to use.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -101,8 +102,8 @@ def summarize_all_videos(ctx: Context) -> dict:
 def analyze_all_sentiments(ctx: Context) -> dict:
     """Fetch top comments and analyze sentiment for all videos in search_results.
 
-    After this completes, combines with pending summaries and writes both
-    to the cache as one entry per video.
+    Stores results in pending_sentiments for the relevance check agent.
+    Cache writes happen only after relevance check approves a video.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -159,15 +160,11 @@ def analyze_all_sentiments(ctx: Context) -> dict:
     with ThreadPoolExecutor(max_workers=len(to_process)) as pool:
         fetched = list(pool.map(lambda v: {"video_id": v["video_id"], "sentiment": _analyze_one(v)}, to_process))
 
-    # Combine with pending summaries and write to cache as one entry
-    pending = ctx.state.get("pending_summaries", {})
     for r in fetched:
-        vid = r["video_id"]
-        summary = pending.get(vid, "")
-        cache[vid] = {"video_id": vid, "summary": summary, "sentiment": r["sentiment"]}
         results.append({**r, "cached": False})
 
-    ctx.state["video_cache"] = cache
-    ctx.state["pending_summaries"] = {}
-    print(f"[analyze_all_sentiments] Cached {len(fetched)} new videos (total cached: {len(cache)})")
+    # Store sentiments for the relevance check agent to use
+    # Cache writes happen ONLY in record_relevance_results (for relevant videos)
+    ctx.state["pending_sentiments"] = {r["video_id"]: r["sentiment"] for r in fetched}
+    print(f"[analyze_all_sentiments] {len(fetched)} videos analyzed")
     return {"sentiments": results, "cache_hits": len(results) - len(fetched), "cache_misses": len(fetched)}

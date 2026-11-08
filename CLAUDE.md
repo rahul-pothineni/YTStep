@@ -24,49 +24,63 @@ Frontend Interface
   │                        ▲ Success (Summary + Timestamps)
   │                        │ Failure (k retries exceeded, rate limited, unable to fetch)
   ▼                        │
-┌──────────────────────────────────────────────────────────────────────────┐
-│  HARNESS                                                                │
-│                                                                         │
-│  ┌──────────────┐  pass user query   ┌───────────────────────────────┐  │
-│  │ Orchestrator  │──────────────────▶│  1. Query Evaluation Agent     │  │
-│  │  (central     │◀─────────────────│  Evaluates user query +        │  │
-│  │   coordinator)│  not enough info  │  previous given info.          │  │
-│  │               │  (clarifying Qs)  │  Decides: enough info or not.  │  │
-│  │               │                   └──────────┬────────────────────┘  │
-│  │               │                              │ enough info           │
-│  │               │   ┌──────────────────────────▼────────────────────┐  │
-│  │               │   │  2. Search Agent                              │  │
-│  │               │   │  Takes refined info, creates YT search        │  │
-│  │               │   │  queries, searches YouTube for potential       │  │
-│  │               │   │  videos.                                      │  │
-│  │               │   └──────────┬────────────────────────────────────┘  │
-│  │               │              │ pass potential video links + info      │
-│  │               │   ┌──────────▼────────────────────────────────────┐  │
-│  │               │   │  3. Gemini API / Video Analyzer               │  │
-│  │               │   │  Takes video, summarizes content, extracts    │  │
-│  │               │   │  relevant timestamps.                         │  │
-│  │               │   │                                               │  │
-│  │               │   │  ┌──────────────┐                             │  │
-│  │               │   │  │ Session Cache │◀── Check cache first       │  │
-│  │               │   │  │              │──▶ Cache hit: reuse         │  │
-│  │               │   │  │              │    Cache miss: call API     │  │
-│  │               │   │  │              │◀── Write result to cache    │  │
-│  │               │   │  └──────────────┘                             │  │
-│  │               │   └──────────┬────────────────────────────────────┘  │
-│  │               │              │ summary + timestamps                  │
-│  │               │   ┌──────────▼────────────────────────────────────┐  │
-│  │               │   │  4. Relevance Check Agent                     │  │
-│  │               │   │  Checks if video is relevant to user reqs.   │  │
-│  │               │   │                                               │  │
-│  │               │   │  - If RELEVANT ──▶ return to Orchestrator     │  │
-│  │               │   │  - If NOT RELEVANT ──▶ state reason why +     │  │
-│  │               │   │    send tried video ID back to Search Agent   │  │
-│  │               │   │    (loop with k retries → then fail)          │  │
-│  │               │   └───────────────────────────────────────────────┘  │
-│  │               │                                                      │
-│  │  ◀────────────┤  Summary + Timestamps (if relevant)                  │
-│  └──────────────┘                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  HARNESS                                                                     │
+│                                                                              │
+│  ┌──────────────┐  pass user query   ┌────────────────────────────────────┐  │
+│  │ Orchestrator  │──────────────────▶│  1. Query Evaluation Agent          │  │
+│  │  (central     │◀─────────────────│  Evaluates user query + previous    │  │
+│  │   coordinator)│  not enough info  │  given info.                        │  │
+│  │               │  (clarifying Qs)  │  Decides: enough info or not.       │  │
+│  │               │  loop w/ k retries│  (loop cap k → force continue)      │  │
+│  │               │                   └──────────┬─────────────────────────┘  │
+│  │               │                              │ enough info                │
+│  │               │                              ▼                            │
+│  │               │   ┌──────────────────────────────────────────────────┐    │
+│  │               │   │  2. Search Agent  (uses YT API Tool)             │    │
+│  │               │   │  Takes refined info, creates YT search queries,  │    │
+│  │               │   │  searches YouTube for potential videos.           │    │
+│  │               │   └──────────┬───────────────────────────────────────┘    │
+│  │               │              │ pass potential video links + required info  │
+│  │               │              ▼                                             │
+│  │               │   ┌─────────────────┐                                     │
+│  │               │   │  Session Cache   │◀── First checks cache              │
+│  │               │   │                  │──▶ Cache hit: reuse both            │
+│  │               │   │                  │    Cache miss: process below        │
+│  │               │   └──┬──────────────┘                                     │
+│  │               │      │ cache miss (both run in parallel)                   │
+│  │               │      ├───────────────────────┬────────────────────────┐    │
+│  │               │      ▼                       ▼                        │    │
+│  │               │   ┌────────────────────┐  ┌──────────────────────┐   │    │
+│  │               │   │ 3a. Gemini API     │  │ 3b. Comment Analysis │   │    │
+│  │               │   │ Summarizes video   │  │ Fetches first 50     │   │    │
+│  │               │   │ content + extracts │  │ comments, analyzes   │   │    │
+│  │               │   │ relevant timestamps│  │ sentiment & useful   │   │    │
+│  │               │   │ (in parallel)      │  │ info (in parallel)   │   │    │
+│  │               │   └────────┬───────────┘  └──────────┬───────────┘   │    │
+│  │               │            └──────────┬──────────────┘               │    │
+│  │               │                       ▼                              │    │
+│  │               │            ┌─────────────────┐                       │    │
+│  │               │            │  Session Cache   │◀── Write combined    │    │
+│  │               │            │  (summary +      │    result to cache   │    │
+│  │               │            │   sentiment per  │    (one entry per    │    │
+│  │               │            │   video ID)      │     video ID)        │    │
+│  │               │            └────────┬────────┘                       │    │
+│  │               │                     │ summary + timestamps + sentiment│    │
+│  │               │   ┌─────────────────▼────────────────────────────────┘    │
+│  │               │   │  4. Relevance Check Agent                             │
+│  │               │   │  Checks if video is relevant to user reqs.           │
+│  │               │   │                                                       │
+│  │               │   │  - If RELEVANT ──▶ return Summary + Timestamps        │
+│  │               │   │    to Orchestrator                                    │
+│  │               │   │  - If NOT RELEVANT ──▶ state reason why +             │
+│  │               │   │    send tried video ID back to Search Agent            │
+│  │               │   │    (loop with k retries → then fail)                  │
+│  │               │   └───────────────────────────────────────────────────┘    │
+│  │               │                                                           │
+│  │  ◀────────────┤  Summary + Timestamps (if relevant)                       │
+│  └──────────────┘                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -102,15 +116,19 @@ Frontend Interface
   - Searches YouTube and returns candidate video list
   - Excludes previously rejected video IDs on retry loops
 
-### 4. Video Analyzer (Gemini API)
-- **Role:** Analyze video content, produce summaries and timestamps
+### 4. Video Analyzer (Gemini API + Comment Sentiment)
+- **Role:** Analyze video content and audience reception
 - **Inputs:** Video links from Search Agent
-- **Outputs:** Content summary + relevant timestamps for each video
+- **Outputs:** Content summary + relevant timestamps + comment sentiment for each video
+- **Parallel processing:** Two tasks run simultaneously per video:
+  - **3a. Gemini API** — Summarizes video content and extracts relevant timestamps
+  - **3b. Comment Analysis** — Fetches first 50 comments (by relevance), analyzes sentiment and useful info
 - **Caching:**
-  - **Session Cache** — checks cache before calling Gemini API
-  - Cache hit → reuse existing analysis (avoids redundant API calls on re-queries)
-  - Cache miss → call Gemini API → write result to cache
-- **Tech:** Google Gemini API for video understanding
+  - **Session Cache** — checks cache first (keyed by video ID)
+  - Cache hit → reuse existing summary + sentiment (skip both tasks)
+  - Cache miss → run both tasks in parallel → write combined result (summary + sentiment) to cache as one entry per video ID
+  - One cache entry = one video. If cache miss, both tasks must run — no partial cache states.
+- **Tech:** Google Gemini API for video understanding, YouTube Data API for comments
 
 ### 5. Relevance Check Agent
 - **Role:** Validate that analyzed videos actually match user requirements
@@ -126,9 +144,12 @@ Frontend Interface
 ## Data Flow Summary
 
 1. **User → Frontend → Orchestrator → Query Eval Agent** (clarification loop, max k)
-2. **Query Eval Agent → Search Agent** (once enough info gathered)
-3. **Search Agent → Video Analyzer (Gemini + Cache) → Relevance Check** (relevance loop, max k)
-4. **Relevance Check → Orchestrator → Frontend → User** (on success)
+2. **Query Eval Agent → Search Agent** (once enough info gathered, uses YT API tool)
+3. **Search Agent → Session Cache check** (cache hit → skip to step 5, cache miss → step 4)
+4. **Cache miss → parallel: Gemini API (summarize + timestamps) + Comment Analysis (sentiment)** → write combined result to cache
+5. **Summary + Timestamps + Sentiment → Relevance Check Agent** (relevance loop, max k)
+6. **Relevance Check → Orchestrator → Frontend → User** (on success)
+7. **Relevance Check (not relevant) → Search Agent** (retry with tried video ID, loop with k retries → then fail)
 
 ### Failure Modes
 - Query Evaluation exceeds k retries → force continue with available info
@@ -137,4 +158,5 @@ Frontend Interface
 
 ### Inter-Agent Communication
 - Each sub-agent provides its **results + summary of work** to both the next agent in the pipeline and back to the Orchestrator
+- Orchestrator sends query context forward for use by downstream agents (e.g., relevance check)
 - Orchestrator maintains full context of the pipeline state

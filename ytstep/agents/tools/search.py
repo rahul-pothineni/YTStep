@@ -111,6 +111,9 @@ def search_youtube(
     except httpx.RequestError as e:
         return {"error": f"Request failed: {e}"}
 
+    # Exclude previously tried video IDs (from relevance check retries)
+    tried_ids = set(ctx.state.get("tried_video_ids", []))
+
     # Collect videos and their channel IDs
     raw_videos = []
     channel_ids = set()
@@ -128,6 +131,10 @@ def search_youtube(
             "description": snippet.get("description", ""),
             "published_at": snippet.get("publishedAt", ""),
         })
+
+    # Filter out previously rejected videos
+    if tried_ids:
+        raw_videos = [v for v in raw_videos if v["video_id"] not in tried_ids]
 
     # Fetch subscriber counts and filter by 10k+ subs
     try:
