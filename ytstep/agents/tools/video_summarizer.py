@@ -94,12 +94,24 @@ def summarize_all_videos(ctx: Context) -> dict:
     with ThreadPoolExecutor(max_workers=len(to_process)) as pool:
         fetched = list(pool.map(lambda v: {"video_id": v["video_id"], "summary": _summarize_one(v)}, to_process))
 
-    for r in fetched:
+    succeeded = [r for r in fetched if not r["summary"].startswith("Could not summarize:")]
+    failed = [r for r in fetched if r["summary"].startswith("Could not summarize:")]
+
+    if failed:
+        print(f"[summarize_all_videos] {len(failed)} videos failed, continuing with {len(succeeded)}")
+
+    for r in succeeded:
         results.append({**r, "cached": False})
 
+    if not results:
+        return {"error": "All videos failed to summarize.", "failed_count": len(failed)}
+
     # Don't cache yet — wait for sentiment to complete too
-    ctx.state["pending_summaries"] = {r["video_id"]: r["summary"] for r in fetched}
-    return {"summaries": results, "cache_hits": len(results) - len(fetched), "cache_misses": len(fetched)}
+    ctx.state["pending_summaries"] = {r["video_id"]: r["summary"] for r in succeeded}
+    # Update search_results to only include videos that succeeded + cached hits
+    successful_ids = {r["video_id"] for r in succeeded} | {vid for vid in cache if any(v["video_id"] == vid for v in videos)}
+    ctx.state["search_results"] = [v for v in videos if v["video_id"] in successful_ids]
+    return {"summaries": results, "cache_hits": len(results) - len(succeeded), "cache_misses": len(succeeded), "failed_count": len(failed)}
 
 
 def analyze_all_sentiments(ctx: Context) -> dict:
@@ -163,11 +175,23 @@ def analyze_all_sentiments(ctx: Context) -> dict:
     with ThreadPoolExecutor(max_workers=len(to_process)) as pool:
         fetched = list(pool.map(lambda v: {"video_id": v["video_id"], "sentiment": _analyze_one(v)}, to_process))
 
-    for r in fetched:
+    succeeded = [r for r in fetched if not r["sentiment"].startswith("Could not analyze:")]
+    failed = [r for r in fetched if r["sentiment"].startswith("Could not analyze:")]
+
+    if failed:
+        print(f"[analyze_all_sentiments] {len(failed)} videos failed, continuing with {len(succeeded)}")
+
+    for r in succeeded:
         results.append({**r, "cached": False})
+
+    if not results:
+        return {"error": "All sentiment analyses failed.", "failed_count": len(failed)}
 
     # Store sentiments for the relevance check agent to use
     # Cache writes happen ONLY in record_relevance_results (for relevant videos)
-    ctx.state["pending_sentiments"] = {r["video_id"]: r["sentiment"] for r in fetched}
-    print(f"[analyze_all_sentiments] {len(fetched)} videos analyzed")
-    return {"sentiments": results, "cache_hits": len(results) - len(fetched), "cache_misses": len(fetched)}
+    ctx.state["pending_sentiments"] = {r["video_id"]: r["sentiment"] for r in succeeded}
+    # Update search_results to only include videos that succeeded + cached hits
+    successful_ids = {r["video_id"] for r in succeeded} | {vid for vid in cache if any(v["video_id"] == vid for v in videos)}
+    ctx.state["search_results"] = [v for v in ctx.state.get("search_results", []) if v["video_id"] in successful_ids]
+    print(f"[analyze_all_sentiments] {len(succeeded)} videos analyzed")
+    return {"sentiments": results, "cache_hits": len(results) - len(succeeded), "cache_misses": len(succeeded), "failed_count": len(failed)}
