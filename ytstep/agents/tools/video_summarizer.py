@@ -2,7 +2,6 @@ import os
 
 import httpx
 from google import genai
-from google.genai import types
 
 from google.adk.agents import Context
 
@@ -72,19 +71,23 @@ def summarize_all_videos(ctx: Context) -> dict:
 
     def _summarize_one(video):
         try:
-            response = client.models.generate_content(
+            interaction = client.interactions.create(
                 model="gemini-3.5-flash",
-                contents=[
-                    "Summarize this YouTube video. Focus on the main topics covered, "
-                    "key points, and what a viewer would learn from it. "
-                    "Keep it concise — a few sentences.",
-                    types.Part.from_uri(
-                        file_uri=video["url"],
-                        mime_type="video/mp4",
-                    ),
+                input=[
+                    {
+                        "type": "video",
+                        "uri": video["url"],
+                        "processing": "agentic",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Summarize this YouTube video. Focus on the main topics covered, "
+                        "key points, and what a viewer would learn from it. "
+                        "Keep it concise — a few sentences.",
+                    },
                 ],
             )
-            return response.text
+            return interaction.output_text
         except Exception as e:
             return f"Could not summarize: {e}"
 

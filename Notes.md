@@ -23,6 +23,8 @@ Sol 2 (transcript-based): Grab captions via youtube-transcript-api and summarize
 
 **Sol 3**: top 50 comments → get sentiment and any useful information. Make agents ignore attempts at humor. Increases accuracy, increases cost.
 
+**Sol 4** (agentic video processing): Switch from Gemini's static mode (1 FPS, ~6,000 tokens per 60s video) to agentic mode. The model dynamically navigates the video timeline, loading only the transcript/frames it needs based on the prompt. Up to 88% fewer tokens and ~7% higher quality on long-form content. Supported on gemini-3.5-flash-lite/3.5-flash and newer. Uses the interactions API (`client.interactions.create`) with `"processing": "agentic"` on the video input.
+
 Problem: The orchestrator skips video_summarizer_agent after search_agent completes.                                                                    
                   
 Root Cause: Agent routing is LLM-driven and the orchestrator decides which agent to transfer to next. The search_agent instruction told it to present results to the user, so by the time control returned to the orchestrator, the LLM saw results were already shared and decided the job was done, skipping the summarizer. 
