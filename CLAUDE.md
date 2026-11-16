@@ -160,3 +160,18 @@ Frontend Interface
 - Each sub-agent provides its **results + summary of work** to both the next agent in the pipeline and back to the Orchestrator
 - Orchestrator sends query context forward for use by downstream agents (e.g., relevance check)
 - Orchestrator maintains full context of the pipeline state
+
+---
+
+## Evals
+
+Evals test each agent in isolation using Google ADK's eval framework + LLM-as-a-judge. They run against the real agent code, not mocks.
+
+```bash
+pip install 'google-adk[eval]'
+pytest tests/test_evals.py -v -s
+```
+
+The query eval agent tests take ~30 seconds (4 cases with LLM inference + judge scoring).
+
+Eval files: `tests/evals/*.test.json`. Criteria/rubrics: `tests/evals/test_config.json`. Add new agent tests as a `.test.json` + test function in `tests/test_evals.py`.

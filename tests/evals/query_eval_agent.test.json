@@ -1,0 +1,162 @@
+{
+  "eval_set_id": "ytstep_query_eval_agent",
+  "name": "Query Eval Agent",
+  "description": "Tests the query_eval_agent in isolation — clarification behavior, tool usage, and finalization.",
+  "eval_cases": [
+    {
+      "eval_id": "vague_query_asks_clarification",
+      "conversation": [
+        {
+          "invocation_id": "qe-001",
+          "user_content": {
+            "parts": [{ "text": "find me a video" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of video are you looking for?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "specific_query_finalizes_immediately",
+      "conversation": [
+        {
+          "invocation_id": "qe-002",
+          "user_content": {
+            "parts": [{ "text": "Find me a 10 minute beginner yoga video for morning stretching" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Got it, I'll search for a short beginner yoga video for morning stretching." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "finalize_query", "args": {} }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "records_clarification_after_user_answers",
+      "conversation": [
+        {
+          "invocation_id": "qe-003a",
+          "user_content": {
+            "parts": [{ "text": "I want to watch something about cooking" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of cooking are you interested in?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        },
+        {
+          "invocation_id": "qe-003b",
+          "user_content": {
+            "parts": [{ "text": "Italian pasta, like a step by step recipe for carbonara" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Nice, I'll go find a carbonara recipe walkthrough for you." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "record_clarification", "args": {} },
+              { "name": "finalize_query", "args": {} }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "extremely_vague_needs_multiple_rounds",
+      "conversation": [
+        {
+          "invocation_id": "qe-004a",
+          "user_content": {
+            "parts": [{ "text": "video" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What topic are you interested in?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        },
+        {
+          "invocation_id": "qe-004b",
+          "user_content": {
+            "parts": [{ "text": "fitness" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of fitness? Like a home workout, gym routine, yoga?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "record_clarification", "args": {} }
+            ],
+            "intermediate_responses": []
+          }
+        },
+        {
+          "invocation_id": "qe-004c",
+          "user_content": {
+            "parts": [{ "text": "a 20 minute home workout for beginners, no equipment needed" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Perfect, I'll search for that!" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "record_clarification", "args": {} },
+              { "name": "finalize_query", "args": {} }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    }
+  ]
+}

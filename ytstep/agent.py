@@ -44,3 +44,11 @@ videos than expected after retries, that's okay — just show what we found.
         relevance_check_agent,
     ],
 )
+
+def main():
+   """Main execution function."""
+   pass
+
+
+if __name__ == "__main__":
+   main()

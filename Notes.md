@@ -31,5 +31,32 @@ Root Cause: Agent routing is LLM-driven and the orchestrator decides which agent
 
 Solution: Removed the "present results" step from search_agent. It now silently hands back to the orchestrator after calling search_youtube, forcing the orchestrator to continue the chain to video_summarizer_agent since no results have been shown yet.
 
+Evaluation Strategy —
 
+Using ADK's eval framework (`AgentEvaluator`) with pytest. Evals run against the real agents — no mocks. Each sub-agent is tested in isolation by extracting it via `agent_name` and detaching its parent (`agent.parent_agent = None`) so the pipeline stops at the agent boundary.
+
+Each eval case is scored on **7 rules** (each 0.0–1.0), normalized to 0.0–1.0 with a 0.6 pass threshold. Each rule was validated by removing its instruction from the agent prompt and confirming that specific rule scores 0.0.
+
+**LLM-judged** (gemini-3.8-flash per-invocation rubric):
+1. `friendly_casual_tone` — no jargon or engineer-speak
+2. `no_finalize_without_topic` — don't finalize on vague requests
+3. `finalize_when_enough_info` — don't over-ask when topic + extras given
+4. `one_question_at_a_time` — single question per turn
+5. `correct_tool_sequencing` — tools called in sensible order
+
+**Deterministic** (inspect actual tool calls across full trace):
+6. `calls_record_clarification` — called after each clarification answer in multi-turn
+7. `asks_before_finalizing` — confirmation text present before `finalize_query` in multi-turn
+
+Rules 6–7 are deterministic because the ADK rubric judge evaluates per-invocation (one turn), so it can't assess multi-turn patterns — it always saw "single turn, rule N/A → 1.0."
+
+Run: `pytest tests/test_evals.py -v -s` (~60s, 4 cases). Files: `tests/evals/*.test.json`, `tests/evals/test_config.json`.
+
+Problems encountered —
+
+**1. Full pipeline executing during component tests.** Targeting the root orchestrator ran every sub-agent. Fix: extract sub-agent via `agent_name`, then `agent.parent_agent = None`. Test time dropped from minutes to ~10 seconds.
+
+**2. Criteria too strict for LLM non-determinism.** `IN_ORDER` trajectory at 1.0 failed when the agent asked 3 questions instead of 2. Fix: trajectory and response match at 0.0 (informational only), rubric normalized score at 0.6 as the real gate.
+
+**3. Rubric judge is per-invocation, not per-conversation.** Multi-turn rules (record_clarification, confirm before finalize) always passed because the judge saw each turn independently. Fix: replaced those rubrics with deterministic checks that inspect the full invocation trace.
 

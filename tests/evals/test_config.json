@@ -1,0 +1,48 @@
+{
+  "criteria": {
+    "tool_trajectory_avg_score": {
+      "threshold": 0.0,
+      "match_type": "ANY_ORDER"
+    },
+    "response_match_score": 0.0,
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 0.6,
+      "judge_model_options": {
+        "judge_model": "gemini-3.8-flash",
+        "num_samples": 1
+      },
+      "rubrics": [
+        {
+          "rubric_id": "friendly_casual_tone",
+          "rubric_content": {
+            "text_property": "The agent talks like a friendly, casual person. No jargon, no bullet lists, no engineer-speak. Just natural conversation."
+          }
+        },
+        {
+          "rubric_id": "no_finalize_without_topic",
+          "rubric_content": {
+            "text_property": "If the agent called finalize_query, the user had already provided a specific topic or subject (e.g. 'yoga', 'carbonara recipe', 'Python decorators'). Vague requests like 'find me a video', 'video', or 'something to watch' are NOT a topic — the agent must ask a clarifying question instead of finalizing."
+          }
+        },
+        {
+          "rubric_id": "finalize_when_enough_info",
+          "rubric_content": {
+            "text_property": "If the user gave a clear topic plus optional extras (length, style, recency, creator), the agent finalized immediately without asking unnecessary follow-up questions. The agent did not over-ask when it already had enough info."
+          }
+        },
+        {
+          "rubric_id": "one_question_at_a_time",
+          "rubric_content": {
+            "text_property": "When asking for clarification, the agent asks only ONE question at a time, not multiple questions bundled together."
+          }
+        },
+        {
+          "rubric_id": "correct_tool_sequencing",
+          "rubric_content": {
+            "text_property": "Look at the function/tool calls. If finalize_query was called, the agent completed it successfully and handed off. If record_clarification was called, it was called with the user's actual answer (not made-up text). The agent used tools in a sensible order."
+          }
+        }
+      ]
+    }
+  }
+}

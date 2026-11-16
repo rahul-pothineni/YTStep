@@ -25,3 +25,19 @@ Check out the [Notes.md](Notes.md) file for more information about the motivatio
    ```
 
 4. Open the URL shown in the terminal and start chatting with the agent.
+
+## Running Evals
+
+Evals test each agent in isolation against the real agent code. They use Google ADK's eval framework with an LLM-as-a-judge for quality scoring.
+
+1. **Install eval dependencies:**
+   ```bash
+   pip install 'google-adk[eval]'
+   ```
+
+2. **Run the eval suite:**
+   ```bash
+   pytest tests/test_evals.py -v -s
+   ```
+
+The query eval agent tests take ~30 seconds to complete (4 cases with LLM inference + judge scoring). Eval files live in `tests/evals/`.
