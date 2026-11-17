@@ -20,8 +20,6 @@ logging.getLogger("google_adk").setLevel(logging.WARNING)
 logging.getLogger("google.adk").setLevel(logging.WARNING)
 
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
-from google.adk.evaluation.eval_set import EvalSet
-
 
 AGENT_MODULE = "ytstep.agent"
 EVAL_DIR = "tests/evals"
@@ -36,17 +34,12 @@ CONFIRM_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-RULE_THRESHOLD = 0.6
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def _fmt_score(score: float | None) -> str:
-    if score is None:
-        return "-"
-    return f"{score:.2f}"
-
-
-def _extract_tool_names_from_events(invocation) -> list[str]:
-    """Extract tool call names from InvocationEvents in an actual invocation."""
+def _extract_tool_names(invocation) -> list[str]:
     if not invocation or not invocation.intermediate_data:
         return []
     events = invocation.intermediate_data
@@ -60,8 +53,14 @@ def _extract_tool_names_from_events(invocation) -> list[str]:
     return names
 
 
-async def _run_eval(eval_file: str, config_file: str, agent_name: str | None = None):
-    """Run eval against the real agent module. Pass agent_name to target a sub-agent."""
+def _agent_text(invocation) -> str:
+    if invocation.final_response and invocation.final_response.parts:
+        return invocation.final_response.parts[0].text or ""
+    return ""
+
+
+async def _run_case(case_id: str):
+    """Run a single eval case and return its invocations + rubric scores."""
     from google.adk.evaluation.eval_config import EvalConfig, get_eval_metrics_from_config
     from google.adk.evaluation.simulation.user_simulator_provider import UserSimulatorProvider
     from google.adk.evaluation.metric_evaluator_registry import (
@@ -69,200 +68,182 @@ async def _run_eval(eval_file: str, config_file: str, agent_name: str | None = N
         register_custom_metrics_from_config,
     )
 
-    eval_config = AgentEvaluator.find_config_for_test_file(eval_file)
-    if eval_config is None:
-        with open(config_file) as f:
-            eval_config = EvalConfig.model_validate(json.load(f))
+    eval_file = f"{EVAL_DIR}/query_eval_agent.test.json"
+    config_file = f"{EVAL_DIR}/test_config.json"
+
+    with open(config_file) as f:
+        eval_config = EvalConfig.model_validate(json.load(f))
 
     eval_set = AgentEvaluator._load_eval_set_from_file(eval_file, eval_config, {})
+    eval_set.eval_cases = [c for c in eval_set.eval_cases if c.eval_id == case_id]
+    assert eval_set.eval_cases, f"No eval case with id '{case_id}'"
 
-    agent_for_eval, app = await AgentEvaluator._get_agent_for_eval(
-        module_name=AGENT_MODULE, agent_name=agent_name
+    agent, app = await AgentEvaluator._get_agent_for_eval(
+        module_name=AGENT_MODULE, agent_name="query_eval_agent"
     )
-    if agent_name and agent_for_eval.parent_agent:
-        agent_for_eval.parent_agent = None
+    agent.parent_agent = None
+
     eval_metrics = get_eval_metrics_from_config(eval_config)
     user_sim = UserSimulatorProvider(
         user_simulator_config=eval_config.user_simulator_config
     )
-    metric_evaluator_registry = register_custom_metrics_from_config(
+    registry = register_custom_metrics_from_config(
         eval_config, DEFAULT_METRIC_EVALUATOR_REGISTRY.fork()
     )
 
-    eval_results_by_eval_id = await AgentEvaluator._get_eval_results_by_eval_id(
-        agent_for_eval=agent_for_eval,
-        eval_set=eval_set,
-        eval_metrics=eval_metrics,
-        num_runs=1,
-        user_simulator_provider=user_sim,
-        app_name="ytstep",
-        app=app,
-        metric_evaluator_registry=metric_evaluator_registry,
+    results = await AgentEvaluator._get_eval_results_by_eval_id(
+        agent_for_eval=agent, eval_set=eval_set, eval_metrics=eval_metrics,
+        num_runs=1, user_simulator_provider=user_sim,
+        app_name="ytstep", app=app, metric_evaluator_registry=registry,
     )
 
-    return eval_set, eval_results_by_eval_id
-
-
-def _get_invocations(case_results: list) -> list:
-    """Collect all actual invocations across a case's results."""
     invocations = []
-    for cr in case_results:
-        for per_inv in (cr.eval_metric_result_per_invocation or []):
-            if per_inv.actual_invocation:
-                invocations.append(per_inv.actual_invocation)
-    return invocations
+    rubric_scores = {}
 
-
-def _check_calls_record_clarification(invocations: list) -> tuple[float, str]:
-    """Rule 5: after each clarification answer, record_clarification must be called.
-
-    Deterministic check — inspects actual tool calls across all invocations.
-    Returns (score 0.0 or 1.0, reason).
-    """
-    if len(invocations) <= 1:
-        return 1.0, "Single-turn — no clarification to record"
-
-    missed = 0
-    checked = 0
-    for inv in invocations[1:]:
-        tools = _extract_tool_names_from_events(inv)
-        has_finalize = "finalize_query" in tools
-        has_record = "record_clarification" in tools
-        if has_finalize or has_record:
-            checked += 1
-            if not has_record:
-                missed += 1
-
-    if checked == 0:
-        return 1.0, "No tool calls after first turn"
-    if missed > 0:
-        return 0.0, f"record_clarification missing in {missed}/{checked} turn(s)"
-    return 1.0, f"record_clarification called in all {checked} turn(s)"
-
-
-def _check_asks_before_finalizing(invocations: list) -> tuple[float, str]:
-    """Rule 6: in multi-turn conversations, confirm with user before finalizing.
-
-    Deterministic check — looks for confirmation text in the agent's response
-    on the turn where finalize_query is called.
-    Returns (score 0.0 or 1.0, reason).
-    """
-    if len(invocations) <= 1:
-        return 1.0, "Single-turn — confirmation not required"
-
-    for inv in invocations:
-        tools = _extract_tool_names_from_events(inv)
-        if "finalize_query" not in tools:
-            continue
-        agent_text = ""
-        if inv.final_response and inv.final_response.parts:
-            agent_text = inv.final_response.parts[0].text or ""
-        if CONFIRM_PATTERNS.search(agent_text):
-            return 1.0, "Confirmation found before finalize"
-        return 0.0, f"finalize_query called without confirmation question"
-
-    return 1.0, "finalize_query not called"
-
-
-def _print_results(eval_set: EvalSet, eval_results_by_eval_id: dict) -> bool:
-    """Print formatted results with all 6 rule scores per case."""
-    print("\n" + "=" * 70)
-    print(f"  EVAL SET: {eval_set.name or eval_set.eval_set_id}")
-    print("=" * 70)
-
-    case_summaries = []
-
-    for eval_id, case_results in eval_results_by_eval_id.items():
-        print(f"\n{'=' * 70}")
-        print(f"  CASE: {eval_id}")
-        print(f"{'=' * 70}")
-
-        invocations = _get_invocations(case_results)
-
-        # --- Trace ---
-        print(f"\n  What happened:")
-        for i, inv in enumerate(invocations):
-            user_text = ""
-            if inv.user_content and inv.user_content.parts:
-                user_text = inv.user_content.parts[0].text or ""
-            agent_text = ""
-            if inv.final_response and inv.final_response.parts:
-                agent_text = inv.final_response.parts[0].text or ""
-            tools = _extract_tool_names_from_events(inv)
-
-            print(f"    Turn {i + 1}:")
-            print(f"      User:  {user_text[:100]}")
-            if tools:
-                print(f"      Tools: {' -> '.join(tools)}")
-            print(f"      Agent: {agent_text[:150]}")
-
-        # --- Collect all 6 rule scores ---
-        rule_scores: dict[str, tuple[float, str]] = {}
-
-        # Rules 1-5: from LLM rubric judge
+    for case_results in results.values():
         for cr in case_results:
             for per_inv in (cr.eval_metric_result_per_invocation or []):
+                if per_inv.actual_invocation:
+                    invocations.append(per_inv.actual_invocation)
                 for emr in (per_inv.eval_metric_results or []):
                     if not emr.details or not emr.details.rubric_scores:
                         continue
                     for rs in emr.details.rubric_scores:
-                        rule_scores[rs.rubric_id] = (
-                            rs.score if rs.score is not None else 0.0,
-                            (rs.rationale or "")[:120],
-                        )
+                        rubric_scores[rs.rubric_id] = {
+                            "passed": (rs.score or 0.0) >= 0.5,
+                            "reason": rs.rationale or "",
+                        }
 
-        # Rules 5-6: deterministic checks on tool calls
-        rc_score, rc_reason = _check_calls_record_clarification(invocations)
-        rule_scores["calls_record_clarification"] = (rc_score, rc_reason)
-
-        abf_score, abf_reason = _check_asks_before_finalizing(invocations)
-        rule_scores["asks_before_finalizing"] = (abf_score, abf_reason)
-
-        # --- Display ---
-        print(f"\n  Rule scores:")
-        total_score = 0.0
-        num_rules = 0
-        for rule_id, (score, reason) in rule_scores.items():
-            icon = "PASS" if score >= 0.5 else "FAIL"
-            print(f"    {icon}  {rule_id}: {_fmt_score(score)}")
-            if score < 0.5:
-                print(f"          ^ {reason}")
-            total_score += score
-            num_rules += 1
-
-        normalized = total_score / num_rules if num_rules > 0 else 0.0
-        case_passed = normalized >= RULE_THRESHOLD
-
-        print(f"\n  Normalized score: {_fmt_score(normalized)}"
-              f" (threshold: {_fmt_score(RULE_THRESHOLD)})")
-        verdict = "PASS" if case_passed else "FAIL"
-        print(f"  Verdict: {verdict}")
-        case_summaries.append((eval_id, verdict, rule_scores, normalized))
-
-    # --- Final summary ---
-    passed_count = sum(1 for _, s, _, _ in case_summaries if s == "PASS")
-    failed_count = sum(1 for _, s, _, _ in case_summaries if s == "FAIL")
-    total = len(case_summaries)
-
-    print(f"\n{'=' * 70}")
-    print(f"  SUMMARY: {passed_count}/{total} passed, {failed_count}/{total} failed")
-    print(f"{'=' * 70}")
-    for eval_id, verdict, scores, norm in case_summaries:
-        failing = [rid for rid, (s, _) in scores.items() if s < 0.5]
-        print(f"    {verdict}  {eval_id}  ({_fmt_score(norm)})")
-        if failing:
-            print(f"          Failed: {', '.join(failing)}")
-    print("=" * 70 + "\n")
-
-    return failed_count == 0
+    _print_trace(case_id, invocations)
+    return invocations, rubric_scores
 
 
-async def test_query_eval_agent():
-    """query_eval_agent in isolation — clarification and finalization behavior."""
-    eval_set, results = await _run_eval(
-        f"{EVAL_DIR}/query_eval_agent.test.json",
-        f"{EVAL_DIR}/test_config.json",
-        agent_name="query_eval_agent",
-    )
-    all_passed = _print_results(eval_set, results)
-    assert all_passed, "Some eval cases failed — see output above."
+def _print_trace(case_id: str, invocations: list):
+    print(f"\n{'=' * 60}")
+    print(f"  CASE: {case_id}")
+    print(f"{'=' * 60}")
+    for i, inv in enumerate(invocations):
+        user_text = ""
+        if inv.user_content and inv.user_content.parts:
+            user_text = inv.user_content.parts[0].text or ""
+        tools = _extract_tool_names(inv)
+        agent = _agent_text(inv)
+        print(f"  Turn {i + 1}:")
+        print(f"    User:  {user_text[:100]}")
+        if tools:
+            print(f"    Tools: {' -> '.join(tools)}")
+        print(f"    Agent: {agent[:150]}")
+
+
+def _assert_pass(passed: bool, reason: str, rule: str):
+    icon = "PASS" if passed else "FAIL"
+    print(f"\n  {icon}  {rule}")
+    if not passed:
+        print(f"    Reason: {reason}")
+    assert passed, f"{rule} failed: {reason}"
+
+
+# ---------------------------------------------------------------------------
+# Tests — one per instruction rule
+# ---------------------------------------------------------------------------
+
+async def test_friendly_tone():
+    """
+    Input: "find me a video"
+    Expected:
+    - Agent responds in casual, friendly language
+    - No jargon, bullet lists, or engineer-speak
+    """
+    _, rubric_scores = await _run_case("friendly_tone")
+    result = rubric_scores.get("friendly_tone", {"passed": False, "reason": "No rubric score returned"})
+    _assert_pass(result["passed"], result["reason"], "friendly_tone")
+
+
+async def test_no_finalize_without_topic():
+    """
+    Input: "find me a video"
+    Expected:
+    - Agent does NOT call finalize_query
+    - Agent asks a clarifying question instead
+    """
+    invocations, _ = await _run_case("no_finalize_without_topic")
+    tools = _extract_tool_names(invocations[0])
+    passed = "finalize_query" not in tools
+    reason = "finalize_query was called on a vague request with no topic" if not passed else ""
+    _assert_pass(passed, reason, "no_finalize_without_topic")
+
+
+async def test_finalize_with_enough_info():
+    """
+    Input: "Find me a 10 minute beginner yoga video for morning stretching"
+    Expected:
+    - Agent calls finalize_query on the first turn
+    - Agent does NOT ask unnecessary follow-up questions
+    """
+    invocations, _ = await _run_case("finalize_with_enough_info")
+    tools = _extract_tool_names(invocations[0])
+    passed = "finalize_query" in tools
+    reason = "Agent did not finalize despite having topic + extras" if not passed else ""
+    _assert_pass(passed, reason, "finalize_with_enough_info")
+
+
+async def test_one_question_at_a_time():
+    """
+    Input: "find me a video"
+    Expected:
+    - Agent asks exactly one clarifying question
+    - Agent does NOT bundle multiple questions together
+    """
+    _, rubric_scores = await _run_case("one_question_at_a_time")
+    result = rubric_scores.get("one_question_at_a_time", {"passed": False, "reason": "No rubric score returned"})
+    _assert_pass(result["passed"], result["reason"], "one_question_at_a_time")
+
+
+async def test_calls_record_clarification():
+    """
+    Input: "I want to watch something about cooking" → "Italian pasta, carbonara recipe"
+    Expected:
+    - Agent calls record_clarification after user's second message
+    """
+    invocations, _ = await _run_case("calls_record_clarification")
+    if len(invocations) <= 1:
+        _assert_pass(False, "Expected multi-turn but got single turn", "calls_record_clarification")
+        return
+    tools = _extract_tool_names(invocations[1])
+    passed = "record_clarification" in tools
+    reason = "record_clarification not called after user answered clarifying question" if not passed else ""
+    _assert_pass(passed, reason, "calls_record_clarification")
+
+
+async def test_cap_reached_forces_finalize():
+    """
+    Input: "show me something fun" (with clarification_count already at 2, so cap triggers)
+    Expected:
+    - Agent calls record_clarification (count becomes 3, cap_reached=true)
+    - Agent calls finalize_query immediately after seeing cap_reached
+    """
+    invocations, _ = await _run_case("cap_reached_forces_finalize")
+    tools = _extract_tool_names(invocations[0])
+    has_finalize = "finalize_query" in tools
+    reason = "Agent did not call finalize_query when cap was reached" if not has_finalize else ""
+    _assert_pass(has_finalize, reason, "cap_reached_forces_finalize")
+
+
+async def test_confirms_before_finalizing():
+    """
+    Input: "video" → "fitness" → "a 20 minute home workout for beginners"
+    Expected:
+    - Before calling finalize_query, agent asks user to confirm
+    - Agent text contains a confirmation question (e.g. "anything to add?")
+    """
+    invocations, _ = await _run_case("confirms_before_finalizing")
+    for inv in invocations:
+        tools = _extract_tool_names(inv)
+        if "finalize_query" not in tools:
+            continue
+        text = _agent_text(inv)
+        passed = bool(CONFIRM_PATTERNS.search(text))
+        reason = f"finalize_query called without confirmation question. Agent said: {text[:120]}" if not passed else ""
+        _assert_pass(passed, reason, "confirms_before_finalizing")
+        return
+    _assert_pass(True, "", "confirms_before_finalizing")

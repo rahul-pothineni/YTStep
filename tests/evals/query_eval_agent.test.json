@@ -1,13 +1,13 @@
 {
   "eval_set_id": "ytstep_query_eval_agent",
   "name": "Query Eval Agent",
-  "description": "Tests the query_eval_agent in isolation — clarification behavior, tool usage, and finalization.",
+  "description": "One eval case per instruction rule in query_eval_agent.",
   "eval_cases": [
     {
-      "eval_id": "vague_query_asks_clarification",
+      "eval_id": "friendly_tone",
       "conversation": [
         {
-          "invocation_id": "qe-001",
+          "invocation_id": "ft-001",
           "user_content": {
             "parts": [{ "text": "find me a video" }],
             "role": "user"
@@ -29,10 +29,35 @@
       }
     },
     {
-      "eval_id": "specific_query_finalizes_immediately",
+      "eval_id": "no_finalize_without_topic",
       "conversation": [
         {
-          "invocation_id": "qe-002",
+          "invocation_id": "nf-001",
+          "user_content": {
+            "parts": [{ "text": "find me a video" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of video are you looking for?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "finalize_with_enough_info",
+      "conversation": [
+        {
+          "invocation_id": "fe-001",
           "user_content": {
             "parts": [{ "text": "Find me a 10 minute beginner yoga video for morning stretching" }],
             "role": "user"
@@ -56,10 +81,35 @@
       }
     },
     {
-      "eval_id": "records_clarification_after_user_answers",
+      "eval_id": "one_question_at_a_time",
       "conversation": [
         {
-          "invocation_id": "qe-003a",
+          "invocation_id": "oq-001",
+          "user_content": {
+            "parts": [{ "text": "find me a video" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of video are you looking for?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "calls_record_clarification",
+      "conversation": [
+        {
+          "invocation_id": "rc-001a",
           "user_content": {
             "parts": [{ "text": "I want to watch something about cooking" }],
             "role": "user"
@@ -74,7 +124,7 @@
           }
         },
         {
-          "invocation_id": "qe-003b",
+          "invocation_id": "rc-001b",
           "user_content": {
             "parts": [{ "text": "Italian pasta, like a step by step recipe for carbonara" }],
             "role": "user"
@@ -99,10 +149,40 @@
       }
     },
     {
-      "eval_id": "extremely_vague_needs_multiple_rounds",
+      "eval_id": "cap_reached_forces_finalize",
       "conversation": [
         {
-          "invocation_id": "qe-004a",
+          "invocation_id": "cr-001",
+          "user_content": {
+            "parts": [{ "text": "show me something fun" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Alright, let me search with what I've got!" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "record_clarification", "args": {} },
+              { "name": "finalize_query", "args": {} }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "clarification_count": 2
+        }
+      }
+    },
+    {
+      "eval_id": "confirms_before_finalizing",
+      "conversation": [
+        {
+          "invocation_id": "cf-001a",
           "user_content": {
             "parts": [{ "text": "video" }],
             "role": "user"
@@ -117,13 +197,13 @@
           }
         },
         {
-          "invocation_id": "qe-004b",
+          "invocation_id": "cf-001b",
           "user_content": {
             "parts": [{ "text": "fitness" }],
             "role": "user"
           },
           "final_response": {
-            "parts": [{ "text": "What kind of fitness? Like a home workout, gym routine, yoga?" }],
+            "parts": [{ "text": "What kind of fitness? Home workout, yoga, gym?" }],
             "role": "model"
           },
           "intermediate_data": {
@@ -134,7 +214,7 @@
           }
         },
         {
-          "invocation_id": "qe-004c",
+          "invocation_id": "cf-001c",
           "user_content": {
             "parts": [{ "text": "a 20 minute home workout for beginners, no equipment needed" }],
             "role": "user"
