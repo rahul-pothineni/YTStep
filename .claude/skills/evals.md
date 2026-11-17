@@ -41,6 +41,8 @@ When writing, modifying, or adding evals for any agent in this project.
    - Multi-turn cases: multiple conversation entries with user simulator responses
    - `session_input.state` can pre-set state (e.g. `clarification_count: 2` to test cap behavior)
 
+10. **Invoke the real production agent, do not create a seperate dummy to simulate it**
+
 ## File layout
 
 ```
