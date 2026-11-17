@@ -217,13 +217,17 @@ async def test_calls_record_clarification():
 
 async def test_cap_reached_forces_finalize():
     """
-    Input: "show me something fun" (with clarification_count already at 2, so cap triggers)
+    Input: "show me something fun" → "I dunno, maybe something entertaining"
+           (clarification_count starts at 2, so record_clarification returns cap_reached=true)
     Expected:
-    - Agent calls record_clarification (count becomes 3, cap_reached=true)
-    - Agent calls finalize_query immediately after seeing cap_reached
+    - Agent calls record_clarification on turn 2 (count becomes 3, cap_reached=true)
+    - Agent calls finalize_query on turn 2 after seeing cap_reached
     """
     invocations, _ = await _run_case("cap_reached_forces_finalize")
-    tools = _extract_tool_names(invocations[0])
+    if len(invocations) <= 1:
+        _assert_pass(False, "Expected multi-turn but got single turn", "cap_reached_forces_finalize")
+        return
+    tools = _extract_tool_names(invocations[-1])
     has_finalize = "finalize_query" in tools
     reason = "Agent did not call finalize_query when cap was reached" if not has_finalize else ""
     _assert_pass(has_finalize, reason, "cap_reached_forces_finalize")

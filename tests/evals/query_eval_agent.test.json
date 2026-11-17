@@ -152,9 +152,24 @@
       "eval_id": "cap_reached_forces_finalize",
       "conversation": [
         {
-          "invocation_id": "cr-001",
+          "invocation_id": "cr-001a",
           "user_content": {
             "parts": [{ "text": "show me something fun" }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "What kind of fun stuff are you in the mood for?" }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          }
+        },
+        {
+          "invocation_id": "cr-001b",
+          "user_content": {
+            "parts": [{ "text": "I dunno, maybe something entertaining" }],
             "role": "user"
           },
           "final_response": {
