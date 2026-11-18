@@ -34,9 +34,9 @@ def _get_video_durations(api_key: str, video_ids: list[str]) -> dict[str, int]:
             params={
                 "part": "contentDetails",
                 "id": ",".join(video_ids),
-                "key": api_key,
             },
             timeout=15,
+            headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
         )
         info["http_status"] = resp.status_code
         resp.raise_for_status()
@@ -57,9 +57,9 @@ def _get_channel_subscribers(api_key: str, channel_ids: list[str]) -> dict[str, 
             params={
                 "part": "statistics",
                 "id": ",".join(channel_ids),
-                "key": api_key,
             },
             timeout=15,
+            headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
         )
         info["http_status"] = resp.status_code
         resp.raise_for_status()
@@ -105,7 +105,6 @@ def search_youtube(
         "q": search_query,
         "type": "video",
         "maxResults": fetch_count,
-        "key": api_key,
     }
 
     try:
@@ -114,6 +113,7 @@ def search_youtube(
                 "https://www.googleapis.com/youtube/v3/search",
                 params=params,
                 timeout=15,
+                headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
             )
             info["http_status"] = resp.status_code
             resp.raise_for_status()

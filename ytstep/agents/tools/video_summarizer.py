@@ -24,9 +24,9 @@ def _get_video_comments(api_key: str, video_id: str, max_comments: int = 50) -> 
                     "maxResults": max_comments,
                     "order": "relevance",
                     "textFormat": "plainText",
-                    "key": api_key,
                 },
                 timeout=15,
+                headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
             )
             info["http_status"] = resp.status_code
             resp.raise_for_status()

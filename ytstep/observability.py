@@ -25,6 +25,7 @@ import contextvars
 import json
 import logging
 import os
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -106,12 +107,29 @@ def log(logger: logging.Logger, event: str, level: int = logging.INFO, exc_info:
     logger.log(level, event, extra={"fields": fields}, exc_info=exc_info)
 
 
+_SECRET_PARAM = re.compile(r"([?&](?:key|api_key|access_token|token)=)[^&'\"\s]+", re.IGNORECASE)
+
+
 def describe_error(err: BaseException | str | None) -> str | None:
+    """A short, safe description of an error for logs and the metrics tables.
+
+    HTTP errors are reduced to their status (their text includes the request
+    URL), and anything that looks like `key=...` is blanked out, so API keys
+    never end up in logs or the database.
+    """
     if err is None:
         return None
     if isinstance(err, BaseException):
-        return f"{type(err).__name__}: {str(err)[:400]}"
-    return str(err)[:400]
+        response = getattr(err, "response", None)
+        status = getattr(response, "status_code", None)
+        if status is not None and type(err).__name__ == "HTTPStatusError":
+            text = f"HTTP {status} {getattr(response, 'reason_phrase', '')}".strip()
+        else:
+            text = str(err)
+        text = f"{type(err).__name__}: {text}"
+    else:
+        text = str(err)
+    return _SECRET_PARAM.sub(r"\1REDACTED", text)[:400]
 
 
 def _now() -> datetime:
