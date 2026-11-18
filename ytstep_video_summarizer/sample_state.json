@@ -1,0 +1,43 @@
+{
+  "refined_query": {
+    "search_topic": "stochastic calculus",
+    "video_type": "",
+    "desired_length": "about 15 mins",
+    "additional_constraints": ""
+  },
+  "search_results": [
+    {
+      "video_id": "ErJp91YBXbo",
+      "title": "Itô integrals: an Intuitive Introduction | Stochastic Calculus ep.1",
+      "url": "https://www.youtube.com/watch?v=ErJp91YBXbo",
+      "channel": "Math with Ming",
+      "description": "math #probability #statistics #StochasticProcesses #StochasticCalculus #StochCalc #finance #quant 00:00 - 00:51 Introduction: ...",
+      "published_at": "2026-05-16T23:04:47Z",
+      "subscriber_count": 27400,
+      "duration_seconds": 1075,
+      "duration": "17m 55s"
+    },
+    {
+      "video_id": "rvYfNz2H3Uk",
+      "title": "Outline of Stochastic Calculus",
+      "url": "https://www.youtube.com/watch?v=rvYfNz2H3Uk",
+      "channel": "Maths Partner",
+      "description": "",
+      "published_at": "2016-03-29T22:49:31Z",
+      "subscriber_count": 18500,
+      "duration_seconds": 722,
+      "duration": "12m 2s"
+    },
+    {
+      "video_id": "24VLSYw4Yf0",
+      "title": "Introduction to Stochastic Calculus with Applications (Book Review)",
+      "url": "https://www.youtube.com/watch?v=24VLSYw4Yf0",
+      "channel": "Dimitri Bianco",
+      "description": "Today's book review is, \"Introduction to Stochastic Calculus with Applications\" Third Edition by Fima C Klebaner. I have been ...",
+      "published_at": "2021-01-03T06:00:02Z",
+      "subscriber_count": 183000,
+      "duration_seconds": 665,
+      "duration": "11m 5s"
+    }
+  ]
+}

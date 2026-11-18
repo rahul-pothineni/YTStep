@@ -1,0 +1,177 @@
+{
+  "eval_set_id": "ytstep_search_agent",
+  "name": "Search Agent",
+  "description": "One eval case per instruction rule in search_agent.",
+  "eval_cases": [
+    {
+      "eval_id": "calls_search_youtube",
+      "conversation": [
+        {
+          "invocation_id": "sy-001",
+          "user_content": {
+            "parts": [{ "text": "The user wants to find yoga videos for beginners. Search YouTube for them." }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Done, handing back to the orchestrator." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "search_youtube", "args": { "search_query": "yoga for beginners" } }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "refined_query": {
+            "search_topic": "yoga for beginners",
+            "video_type": "",
+            "desired_length": "",
+            "additional_constraints": ""
+          }
+        }
+      }
+    },
+    {
+      "eval_id": "specific_search_query",
+      "conversation": [
+        {
+          "invocation_id": "sq-001",
+          "user_content": {
+            "parts": [{ "text": "The user wants a step by step carbonara recipe tutorial. Search YouTube for them." }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Done, handing back to the orchestrator." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "search_youtube", "args": { "search_query": "carbonara recipe step by step tutorial" } }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "refined_query": {
+            "search_topic": "carbonara recipe",
+            "video_type": "step by step tutorial",
+            "desired_length": "",
+            "additional_constraints": ""
+          }
+        }
+      }
+    },
+    {
+      "eval_id": "translates_duration",
+      "conversation": [
+        {
+          "invocation_id": "td-001",
+          "user_content": {
+            "parts": [{ "text": "The user wants a home workout video, around 20 minutes long. Search YouTube for them." }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Done, handing back to the orchestrator." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "search_youtube", "args": { "search_query": "home workout", "min_duration_minutes": 10, "max_duration_minutes": 30 } }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "refined_query": {
+            "search_topic": "home workout",
+            "video_type": "",
+            "desired_length": "around 20 minutes",
+            "additional_constraints": ""
+          }
+        }
+      }
+    },
+    {
+      "eval_id": "leaves_duration_defaults",
+      "conversation": [
+        {
+          "invocation_id": "ld-001",
+          "user_content": {
+            "parts": [{ "text": "The user wants a Python decorators tutorial. Search YouTube for them." }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Done, handing back to the orchestrator." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "search_youtube", "args": { "search_query": "Python decorators tutorial" } }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "refined_query": {
+            "search_topic": "Python decorators tutorial",
+            "video_type": "",
+            "desired_length": "",
+            "additional_constraints": ""
+          }
+        }
+      }
+    },
+    {
+      "eval_id": "does_not_present_results",
+      "conversation": [
+        {
+          "invocation_id": "np-001",
+          "user_content": {
+            "parts": [{ "text": "The user wants yoga videos for beginners. Search YouTube for them." }],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{ "text": "Done, handing back to the orchestrator." }],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "search_youtube", "args": { "search_query": "yoga for beginners" } }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "ytstep",
+        "user_id": "eval_user",
+        "state": {
+          "refined_query": {
+            "search_topic": "yoga for beginners",
+            "video_type": "",
+            "desired_length": "",
+            "additional_constraints": ""
+          }
+        }
+      }
+    }
+  ]
+}

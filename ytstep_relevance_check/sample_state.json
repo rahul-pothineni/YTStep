@@ -1,0 +1,53 @@
+{
+  "refined_query": {
+    "search_topic": "stochastic calculus",
+    "video_type": "",
+    "desired_length": "about 15 mins",
+    "additional_constraints": ""
+  },
+  "search_results": [
+    {
+      "video_id": "ErJp91YBXbo",
+      "title": "Itô integrals: an Intuitive Introduction | Stochastic Calculus ep.1",
+      "url": "https://www.youtube.com/watch?v=ErJp91YBXbo",
+      "channel": "Math with Ming",
+      "description": "math #probability #statistics #StochasticProcesses #StochasticCalculus #StochCalc #finance #quant 00:00 - 00:51 Introduction: ...",
+      "published_at": "2026-05-16T23:04:47Z",
+      "subscriber_count": 27400,
+      "duration_seconds": 1075,
+      "duration": "17m 55s"
+    },
+    {
+      "video_id": "rvYfNz2H3Uk",
+      "title": "Outline of Stochastic Calculus",
+      "url": "https://www.youtube.com/watch?v=rvYfNz2H3Uk",
+      "channel": "Maths Partner",
+      "description": "",
+      "published_at": "2016-03-29T22:49:31Z",
+      "subscriber_count": 18500,
+      "duration_seconds": 722,
+      "duration": "12m 2s"
+    },
+    {
+      "video_id": "iXbVYStcUMM",
+      "title": "Where Are OG Minecraft YouTubers Now?",
+      "url": "https://www.youtube.com/watch?v=iXbVYStcUMM",
+      "channel": "808savion",
+      "description": "Throughout the years there has been many OG Minecraft youtubers that we have probably watched when we were younger.",
+      "published_at": "2025-06-29T19:38:53Z",
+      "subscriber_count": 64800,
+      "duration_seconds": 1589,
+      "duration": "26m 29s"
+    }
+  ],
+  "pending_summaries": {
+    "ErJp91YBXbo": "This video provides an intuitive, beginner-friendly introduction to the **Itô Integral** in stochastic calculus without relying on heavy measure theory. \n\n### **Main Topics & Key Points:**\n1. **Discrete Gambling Motivation:** Uses a coin-tossing game to introduce stochastic integration in discrete time, emphasizing the key rule of **non-anticipation**—that betting decisions cannot rely on future outcomes.\n2. **Brownian Motion:** Defines Brownian motion (Wiener process) as the continuous-time analog of a random walk, highlighting its core properties: stationary independent Gaussian increments, continuous paths, and non-differentiability.\n3. **Definition of the Itô Integral:** Formally constructs the integral as the mean-square ($L^2$) limit of left Riemann sums, where evaluating functions at left endpoints enforces the non-anticipation rule.\n4. **Deterministic Function Examples:** Demonstrates how integrating a deterministic function with respect to Brownian motion yields a zero-mean Gaussian random variable whose variance equals the standard Riemann integral of $f(s)^2$.\n\n### **What a Viewer Learns:**\nViewers gain a conceptual and visual understanding of why standard calculus fails for continuous non-differentiable processes like Brownian motion, how stochastic integrals are constructed from discrete approximations, and how to calculate the probability distributions of basic Itô integrals.",
+    "rvYfNz2H3Uk": "This video introduces the core concepts and motivation behind **stochastic calculus**, particularly in the context of modeling financial assets like share prices. \n\n**Key takeaways for the viewer:**\n* **Limits of Ordinary Calculus:** Ordinary calculus cannot be used to differentiate Brownian motion because Brownian motion is continuous everywhere but differentiable nowhere due to its fractal/jagged nature at all scales.\n* **Mathematical Failure:** Attempting to differentiate stock price equations containing Brownian motion using standard calculus produces undefined derivative terms (e.g., $\\frac{dB_t}{dt}$).\n* **Differential Form & Structure:** The video introduces writing equations in differential form to prepare for integration. Viewers learn that unlike standard calculus—which is usually taught starting with differentiation—stochastic calculus builds its foundation starting from stochastic integration first to give rigorous meaning to differentiation.",
+    "iXbVYStcUMM": "This video examines the history, evolution, and current status of iconic 2010s Minecraft YouTubers. Viewers learn how some creators, such as SSundee, PrestonPlayz, and Bajan Canadian, successfully adapted to changing algorithms and kid-focused trends, while others, like SkyDoesMinecraft and PopularMMOs, faced severe personal controversies, legal troubles, and channel downfalls. Additionally, the video highlights legacy creators like DanTDM, EthosLab, and the Yogscast, showing how they maintained their influence or transitioned into game publishing and development."
+  },
+  "pending_sentiments": {
+    "ErJp91YBXbo": "This video is overwhelmingly well-received, with viewers calling it an absolute gem and begging the creator to continue the series. People especially love the clear, direct explanations and the strong geometric intuition that makes tough math topics like stochastic calculus much easier to understand.",
+    "rvYfNz2H3Uk": "No comments available.",
+    "iXbVYStcUMM": "The video is super well-received, with viewers bonding over massive doses of childhood nostalgia and sharing updates on old-school Minecraft YouTubers. People really like discussing the wholesome legacies of creators like DanTDM, Stampy, and Etho, while expressing mixed feelings of sadness and relief over the dramatic lives of creators like PopularMMOs and SkyDoesMinecraft."
+  }
+}

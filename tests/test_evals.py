@@ -53,13 +53,28 @@ def _extract_tool_names(invocation) -> list[str]:
     return names
 
 
+def _extract_tool_args(invocation, tool_name: str) -> dict | None:
+    """Return the args dict for the first call to tool_name, or None."""
+    if not invocation or not invocation.intermediate_data:
+        return None
+    events = invocation.intermediate_data
+    if hasattr(events, "invocation_events"):
+        for ev in events.invocation_events:
+            if ev.content and ev.content.parts:
+                for part in ev.content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        if part.function_call.name == tool_name:
+                            return dict(part.function_call.args or {})
+    return None
+
+
 def _agent_text(invocation) -> str:
     if invocation.final_response and invocation.final_response.parts:
         return invocation.final_response.parts[0].text or ""
     return ""
 
 
-async def _run_case(case_id: str):
+async def _run_case(case_id: str, eval_file: str, agent_name: str):
     """Run a single eval case and return its invocations + rubric scores."""
     from google.adk.evaluation.eval_config import EvalConfig, get_eval_metrics_from_config
     from google.adk.evaluation.simulation.user_simulator_provider import UserSimulatorProvider
@@ -68,7 +83,6 @@ async def _run_case(case_id: str):
         register_custom_metrics_from_config,
     )
 
-    eval_file = f"{EVAL_DIR}/query_eval_agent.test.json"
     config_file = f"{EVAL_DIR}/test_config.json"
 
     with open(config_file) as f:
@@ -79,7 +93,7 @@ async def _run_case(case_id: str):
     assert eval_set.eval_cases, f"No eval case with id '{case_id}'"
 
     agent, app = await AgentEvaluator._get_agent_for_eval(
-        module_name=AGENT_MODULE, agent_name="query_eval_agent"
+        module_name=AGENT_MODULE, agent_name=agent_name
     )
     agent.parent_agent = None
 
@@ -118,6 +132,10 @@ async def _run_case(case_id: str):
     return invocations, rubric_scores
 
 
+QUERY_EVAL_FILE = f"{EVAL_DIR}/query_eval_agent.test.json"
+SEARCH_EVAL_FILE = f"{EVAL_DIR}/search_agent.test.json"
+
+
 def _print_trace(case_id: str, invocations: list):
     print(f"\n{'=' * 60}")
     print(f"  CASE: {case_id}")
@@ -147,18 +165,6 @@ def _assert_pass(passed: bool, reason: str, rule: str):
 # Tests — one per instruction rule
 # ---------------------------------------------------------------------------
 
-async def test_friendly_tone():
-    """
-    Input: "find me a video"
-    Expected:
-    - Agent responds in casual, friendly language
-    - No jargon, bullet lists, or engineer-speak
-    """
-    _, rubric_scores = await _run_case("friendly_tone")
-    result = rubric_scores.get("friendly_tone", {"passed": False, "reason": "No rubric score returned"})
-    _assert_pass(result["passed"], result["reason"], "friendly_tone")
-
-
 async def test_no_finalize_without_topic():
     """
     Input: "find me a video"
@@ -166,7 +172,7 @@ async def test_no_finalize_without_topic():
     - Agent does NOT call finalize_query
     - Agent asks a clarifying question instead
     """
-    invocations, _ = await _run_case("no_finalize_without_topic")
+    invocations, _ = await _run_case("no_finalize_without_topic", QUERY_EVAL_FILE, "query_eval_agent")
     tools = _extract_tool_names(invocations[0])
     passed = "finalize_query" not in tools
     reason = "finalize_query was called on a vague request with no topic" if not passed else ""
@@ -180,7 +186,7 @@ async def test_finalize_with_enough_info():
     - Agent calls finalize_query on the first turn
     - Agent does NOT ask unnecessary follow-up questions
     """
-    invocations, _ = await _run_case("finalize_with_enough_info")
+    invocations, _ = await _run_case("finalize_with_enough_info", QUERY_EVAL_FILE, "query_eval_agent")
     tools = _extract_tool_names(invocations[0])
     passed = "finalize_query" in tools
     reason = "Agent did not finalize despite having topic + extras" if not passed else ""
@@ -194,7 +200,7 @@ async def test_one_question_at_a_time():
     - Agent asks exactly one clarifying question
     - Agent does NOT bundle multiple questions together
     """
-    _, rubric_scores = await _run_case("one_question_at_a_time")
+    _, rubric_scores = await _run_case("one_question_at_a_time", QUERY_EVAL_FILE, "query_eval_agent")
     result = rubric_scores.get("one_question_at_a_time", {"passed": False, "reason": "No rubric score returned"})
     _assert_pass(result["passed"], result["reason"], "one_question_at_a_time")
 
@@ -205,7 +211,7 @@ async def test_calls_record_clarification():
     Expected:
     - Agent calls record_clarification after user's second message
     """
-    invocations, _ = await _run_case("calls_record_clarification")
+    invocations, _ = await _run_case("calls_record_clarification", QUERY_EVAL_FILE, "query_eval_agent")
     if len(invocations) <= 1:
         _assert_pass(False, "Expected multi-turn but got single turn", "calls_record_clarification")
         return
@@ -223,7 +229,7 @@ async def test_cap_reached_forces_finalize():
     - Agent calls record_clarification on turn 2 (count becomes 3, cap_reached=true)
     - Agent calls finalize_query on turn 2 after seeing cap_reached
     """
-    invocations, _ = await _run_case("cap_reached_forces_finalize")
+    invocations, _ = await _run_case("cap_reached_forces_finalize", QUERY_EVAL_FILE, "query_eval_agent")
     if len(invocations) <= 1:
         _assert_pass(False, "Expected multi-turn but got single turn", "cap_reached_forces_finalize")
         return
@@ -240,7 +246,7 @@ async def test_confirms_before_finalizing():
     - Before calling finalize_query, agent asks user to confirm
     - Agent text contains a confirmation question (e.g. "anything to add?")
     """
-    invocations, _ = await _run_case("confirms_before_finalizing")
+    invocations, _ = await _run_case("confirms_before_finalizing", QUERY_EVAL_FILE, "query_eval_agent")
     for inv in invocations:
         tools = _extract_tool_names(inv)
         if "finalize_query" not in tools:
@@ -251,3 +257,91 @@ async def test_confirms_before_finalizing():
         _assert_pass(passed, reason, "confirms_before_finalizing")
         return
     _assert_pass(True, "", "confirms_before_finalizing")
+
+
+# ---------------------------------------------------------------------------
+# Search Agent — one test per instruction rule
+# ---------------------------------------------------------------------------
+
+async def test_calls_search_youtube():
+    """
+    Input: refined_query with search_topic "yoga for beginners"
+    Expected:
+    - Agent calls search_youtube tool
+    """
+    invocations, _ = await _run_case("calls_search_youtube", SEARCH_EVAL_FILE, "search_agent")
+    all_tools = []
+    for inv in invocations:
+        all_tools.extend(_extract_tool_names(inv))
+    passed = "search_youtube" in all_tools
+    reason = "Agent did not call search_youtube" if not passed else ""
+    _assert_pass(passed, reason, "calls_search_youtube")
+
+
+async def test_specific_search_query():
+    """
+    Input: refined_query with search_topic "carbonara recipe", video_type "step by step tutorial"
+    Expected:
+    - search_query arg contains specific terms from refined_query (e.g. "carbonara")
+    - Not a generic query like "cooking video"
+    """
+    invocations, rubric_scores = await _run_case("specific_search_query", SEARCH_EVAL_FILE, "search_agent")
+    result = rubric_scores.get("specific_search_query", {"passed": False, "reason": "No rubric score returned"})
+    _assert_pass(result["passed"], result["reason"], "specific_search_query")
+
+
+async def test_translates_duration():
+    """
+    Input: refined_query with desired_length "around 20 minutes"
+    Expected:
+    - search_youtube called with min_duration_minutes set (roughly 10-15)
+    - search_youtube called with max_duration_minutes set (roughly 25-30)
+    """
+    invocations, _ = await _run_case("translates_duration", SEARCH_EVAL_FILE, "search_agent")
+    args = None
+    for inv in invocations:
+        args = _extract_tool_args(inv, "search_youtube")
+        if args is not None:
+            break
+    if args is None:
+        _assert_pass(False, "search_youtube was never called", "translates_duration")
+        return
+    min_dur = args.get("min_duration_minutes", 0)
+    max_dur = args.get("max_duration_minutes", 120)
+    passed = min_dur > 0 and max_dur < 120
+    reason = f"Duration not translated: min={min_dur}, max={max_dur}" if not passed else ""
+    _assert_pass(passed, reason, "translates_duration")
+
+
+async def test_leaves_duration_defaults():
+    """
+    Input: refined_query with desired_length "" (empty)
+    Expected:
+    - search_youtube called with default duration params (min=0, max=120) or omitted
+    """
+    invocations, _ = await _run_case("leaves_duration_defaults", SEARCH_EVAL_FILE, "search_agent")
+    args = None
+    for inv in invocations:
+        args = _extract_tool_args(inv, "search_youtube")
+        if args is not None:
+            break
+    if args is None:
+        _assert_pass(False, "search_youtube was never called", "leaves_duration_defaults")
+        return
+    min_dur = args.get("min_duration_minutes", 0)
+    max_dur = args.get("max_duration_minutes", 120)
+    passed = min_dur == 0 and max_dur >= 120
+    reason = f"Duration was set when it shouldn't be: min={min_dur}, max={max_dur}" if not passed else ""
+    _assert_pass(passed, reason, "leaves_duration_defaults")
+
+
+async def test_does_not_present_results():
+    """
+    Input: refined_query with search_topic "yoga for beginners"
+    Expected:
+    - Agent does NOT list, describe, or present video results to the user
+    - Agent just transfers back to orchestrator
+    """
+    invocations, rubric_scores = await _run_case("does_not_present_results", SEARCH_EVAL_FILE, "search_agent")
+    result = rubric_scores.get("does_not_present_results", {"passed": False, "reason": "No rubric score returned"})
+    _assert_pass(result["passed"], result["reason"], "does_not_present_results")
