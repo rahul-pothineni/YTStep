@@ -13,12 +13,6 @@
       },
       "rubrics": [
         {
-          "rubric_id": "friendly_tone",
-          "rubric_content": {
-            "text_property": "Is the response casual and friendly with no jargon or bullet lists?"
-          }
-        },
-        {
           "rubric_id": "one_question_at_a_time",
           "rubric_content": {
             "text_property": "Did the agent ask only one question, not multiple bundled together?"

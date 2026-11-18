@@ -165,18 +165,6 @@ def _assert_pass(passed: bool, reason: str, rule: str):
 # Tests — one per instruction rule
 # ---------------------------------------------------------------------------
 
-async def test_friendly_tone():
-    """
-    Input: "find me a video"
-    Expected:
-    - Agent responds in casual, friendly language
-    - No jargon, bullet lists, or engineer-speak
-    """
-    _, rubric_scores = await _run_case("friendly_tone", QUERY_EVAL_FILE, "query_eval_agent")
-    result = rubric_scores.get("friendly_tone", {"passed": False, "reason": "No rubric score returned"})
-    _assert_pass(result["passed"], result["reason"], "friendly_tone")
-
-
 async def test_no_finalize_without_topic():
     """
     Input: "find me a video"

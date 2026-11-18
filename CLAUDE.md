@@ -172,6 +172,6 @@ pip install 'google-adk[eval]'
 pytest tests/test_evals.py -v -s
 ```
 
-12 tests total: 7 for query_eval_agent, 5 for search_agent (~5 min). One test per instruction rule, binary pass/fail. See `.claude/skills/evals.md` for the eval skill (how to write and add evals).
+11 tests total: 6 for query_eval_agent, 5 for search_agent (~5 min). One test per instruction rule, binary pass/fail. See the `evals` skill (`.claude/skills/evals/SKILL.md`) for how to write and add evals.
 
 Eval files: `tests/evals/*.test.json`. Criteria/rubrics: `tests/evals/test_config.json`. Add new agent tests as a `.test.json` + test function in `tests/test_evals.py`.

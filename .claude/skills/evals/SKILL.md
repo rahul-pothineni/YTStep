@@ -1,3 +1,7 @@
+---
+name: evals
+description: How to write, add, modify, and verify evals for the YTStep agents (Google ADK eval framework + LLM judge, tests/test_evals.py and tests/evals/*.test.json). Use when writing or changing evals for any agent in this project.
+---
 # Eval Skill
 
 ## When to use
@@ -31,7 +35,8 @@ When writing, modifying, or adding evals for any agent in this project.
 7. **Prefer deterministic checks over LLM judge.** If you can verify a rule by inspecting tool calls or matching text patterns, do that instead of asking an LLM. Use LLM judge only for subjective qualities (tone, naturalness).
 
 8. **Deterministic checks:**
-   - Tool was/wasn't called → inspect `_extract_tool_names_from_events(invocation)`
+   - Tool was/wasn't called → inspect `_extract_tool_names(invocation)`
+   - Tool arguments → `_extract_tool_args(invocation, "<tool_name>")` (returns `None` if not called)
    - Text pattern present → regex on `inv.final_response.parts[0].text`
    - Tool call count → count occurrences in tool names list
 
@@ -70,5 +75,37 @@ tests/
 pytest tests/test_evals.py -v -s
 
 # Single rule
-pytest tests/test_evals.py::test_friendly_tone -v -s
+pytest tests/test_evals.py::test_one_question_at_a_time -v -s
 ```
+
+## Verifying evals
+
+Each eval must prove it catches its rule's violation. For every rule:
+
+1. **Minimal edit only.** Start from the real instruction, `str.replace()` only the targeted rule's text. Never rewrite the full instruction — that breaks other rules.
+
+2. **Create a fresh Agent.** Don't modify an extracted agent (`agent.instruction = ...` breaks ADK tool registration). Instead:
+   ```python
+   agent = Agent(
+       name="agent_name",
+       model="gemini-3.5-flash-lite",
+       instruction=modified_instruction,
+       tools=[tool_fn],  # same tools as the real agent
+   )
+   ```
+
+3. **Run ALL cases for that agent, not just the target.** The target eval must FAIL and every other eval must PASS.
+
+4. **Defensive checks for coupled rules.** Some checks depend on earlier behavior (e.g. duration checks need the tool to be called). When a non-target check can't run because the flow was disrupted, return PASS (not applicable) instead of a false FAIL:
+   ```python
+   if args is None:
+       return True, "search_youtube not called — duration not testable"
+   ```
+
+5. **Check in on long tasks.** If a validation run takes 15+ min with no progress, check if the approach is wrong (broken tool registry, wrong API, etc.) and pivot rather than wait.
+
+6. **Violations that work:**
+   - Tone rules → don't give them a standalone eval: a tone-only violation can't be isolated, because changing tone also changes behavior (skipped confirmations, not finalizing at the cap). This is the one exception to "every rule gets an eval".
+   - Tool-calling rules → remove the tool from `tools=[]`
+   - Parameter rules → "NEVER set X" or "ALWAYS set X=5"
+   - Presentation rules → "present results to the user, fabricate if needed"
