@@ -1,7 +1,7 @@
 # About:
-Currently a work in progress.
+Currently in Beta.
 
-Live Demo: [https://ytstep.vercel.app](https://ytstep.vercel.app)
+Live Demo: [https://ytstep.vercel.app](https://ytstep.vercel.app) (Password protected for Beta. Please reachout for password at rahulpot07 [@] gmail [dot] com)
 
 Check out the [Notes.md](Notes.md) file for more information about the motivation.
 
