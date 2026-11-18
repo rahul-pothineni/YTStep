@@ -11,17 +11,24 @@ Settings come from environment variables:
                                     ytstep/.adk/session.db like `adk web` does.
   APP_PASSCODE                      if set, people must enter this code before
                                     they can chat. Leave unset to skip the screen.
+  LANGFUSE_PUBLIC_KEY / _SECRET_KEY traces of every chat go to Langfuse (optional)
+  LOG_LEVEL, LOG_FORMAT             logging detail (INFO) and style (text locally, json on Vercel)
+
+Logging, metrics and traces: see Metrics.md.
 """
 
 import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
+import sys
+import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
 import uvicorn
 from dotenv import load_dotenv
@@ -36,42 +43,26 @@ from pydantic import BaseModel
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST, PORT = "127.0.0.1", 8080
-ON_VERCEL = bool(os.environ.get("VERCEL"))
 APP_NAME = "ytstep"  # the only agent app this server lets people run
 
 load_dotenv(REPO_ROOT / "ytstep" / ".env")
 PASSCODE = os.environ.get("APP_PASSCODE", "").strip()
 
+sys.path.insert(0, str(REPO_ROOT))  # so `ytstep` imports when run as `python frontend/server.py`
+from ytstep.db import ON_VERCEL, engine_options, postgres_url  # noqa: E402
+from ytstep.observability import describe_error, get_logger, log, store  # noqa: E402
+
+_log = get_logger("server")
+
 
 # ---------- Where chats are saved ----------
 
-def _postgres_url() -> str | None:
-    """Turns the Postgres address Neon/Vercel gives us into one ADK can use.
-
-    ADK needs the async `asyncpg` driver named in the address, and asyncpg
-    doesn't understand the `sslmode`/`channel_binding` options in Neon's
-    address, so those are dropped and SSL is turned on separately below.
-    """
-    url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
-    if not url:
-        return None
-    parts = urlsplit(url)
-    return urlunsplit(("postgresql+asyncpg", parts.netloc, parts.path, "", ""))
-
-
-DB_URL = _postgres_url()
+DB_URL = postgres_url()  # Neon on Vercel; None → ytstep/.adk/session.db like `adk web`
 if ON_VERCEL and not DB_URL:
-    print("[ytstep] WARNING: no DATABASE_URL set, so chats are only kept in memory "
-          "and will disappear. Add a Neon Postgres database to the Vercel project.")
-DB_OPTIONS = None
-if DB_URL:
-    from sqlalchemy.pool import NullPool
+    log(_log, "no DATABASE_URL: chats are only kept in memory and will disappear. "
+        "Add a Neon Postgres database to the Vercel project.", logging.WARNING)
+DB_OPTIONS = engine_options() if DB_URL else None
 
-    DB_OPTIONS = {
-        # Serverless functions freeze between requests, so don't keep idle connections.
-        "poolclass": NullPool,
-        "connect_args": {"ssl": "require", "statement_cache_size": 0},
-    }
 
 def _site_origins() -> list[str] | None:
     """The public addresses of this deployment, which ADK should trust.
@@ -130,6 +121,7 @@ async def unlock(req: UnlockRequest) -> JSONResponse:
         return JSONResponse({"ok": True})
     if not hmac.compare_digest(req.code.strip().encode(), PASSCODE.encode()):
         await asyncio.sleep(1)  # slows down guessing
+        log(_log, "wrong passcode", logging.WARNING)
         return JSONResponse({"ok": False}, status_code=401)
     response = JSONResponse({"ok": True})
     response.set_cookie(
@@ -178,7 +170,7 @@ async def chat_title(req: TitleRequest) -> dict:
         title = (response.text or "").strip().strip("\"'").rstrip(".!?")
         return {"title": title[:60] or _fallback_title(req.text)}
     except Exception as err:  # Title is a nice-to-have: never block the chat on it.
-        print(f"[chat-title] falling back: {err}")
+        log(_log, "chat title: using first words instead", logging.WARNING, error=describe_error(err))
         return {"title": _fallback_title(req.text)}
 
 
@@ -193,6 +185,33 @@ async def cache_key() -> JSONResponse:
         {"key": uuid.uuid4().hex},
         headers={"Cache-Control": "private, max-age=31536000, immutable"},
     )
+
+
+# ---------- What the person saw, reported by the page ----------
+# The server can't see everything: a dropped connection, Vercel's 5-minute
+# limit cutting a search off, or the browser losing its network. The page
+# reports how each message went from its side, and that's saved with the metrics.
+
+class PageReport(BaseModel):
+    session_id: str | None = None
+    outcome: str  # answered | no_answer | error | offline
+    ms: float
+    error: str | None = None
+
+
+@app.post("/api/client-log")
+async def client_log(report: PageReport) -> dict:
+    outcome = re.sub(r"[^a-z_]", "", report.outcome.lower())[:16] or "unknown"
+    error = (report.error or "")[:300] or None
+    log(_log, "page reported a message", logging.INFO if outcome == "answered" else logging.WARNING,
+        outcome=outcome, ms=round(report.ms), session=report.session_id, error=error)
+    await store.add_spans([{
+        "invocation_id": None, "kind": "page", "name": "message", "agent": None,
+        "started_at": datetime.now(timezone.utc), "duration_ms": round(report.ms, 1),
+        "status": "ok" if outcome == "answered" else outcome, "error": error,
+        "details": json.dumps({"session_id": (report.session_id or "")[:80]}),
+    }])
+    return {"ok": True}
 
 
 # ---------- Gatekeeper: only what the chat page needs gets through ----------
@@ -215,7 +234,7 @@ def _route_kind(method: str, path: str) -> str | None:
     """'open' (no passcode needed), 'locked' (needs passcode), or None (blocked)."""
     if (method, path) in OPEN or (method in ("GET", "HEAD") and _is_page_file(path)):
         return "open"
-    if (method, path) in {("POST", "/api/chat-title"), ("POST", "/run_sse")}:
+    if (method, path) in {("POST", "/api/chat-title"), ("POST", "/run_sse"), ("POST", "/api/client-log")}:
         return "locked"
     match = SESSIONS.match(path)
     if match and method in (("GET", "PATCH") if match.group(1) else ("GET", "POST")):
@@ -235,6 +254,25 @@ class Gatekeeper:
             await self.app(scope, receive, send)
             return
 
+        start = time.perf_counter()
+        status = {"code": None}
+
+        async def send_logged(message):
+            if message["type"] == "http.response.start":
+                status["code"] = message["status"]
+            await send(message)
+
+        try:
+            await self._handle(scope, receive, send_logged)
+        finally:
+            ms = round((time.perf_counter() - start) * 1000, 1)
+            code = status["code"]
+            # Page files are noise; log API calls, and anything that wasn't OK.
+            if scope["path"].startswith(("/api/", "/apps/", "/run_sse")) or not code or code >= 400:
+                log(_log, "request", logging.INFO if code and code < 500 else logging.ERROR,
+                    method=scope["method"], path=scope["path"], status=code, ms=ms)
+
+    async def _handle(self, scope, receive, send):
         kind = _route_kind(scope["method"], scope["path"])
         if kind is None:
             await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
@@ -285,6 +323,9 @@ app.add_middleware(Gatekeeper)
 # The chat page. Mounted last so the routes above (/run_sse, /apps/..., /api/...) win.
 # On Vercel these files are served straight from Vercel's CDN.
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="chat")
+
+log(_log, "server ready", chats=("postgres" if DB_URL else ("memory" if ON_VERCEL else "sqlite")),
+    metrics=store.target(), passcode=bool(PASSCODE), vercel_env=os.environ.get("VERCEL_ENV"))
 
 if __name__ == "__main__":
     print(f"\n  YTStep is running at http://{HOST}:{PORT}\n")

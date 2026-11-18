@@ -1,5 +1,9 @@
 from google.adk.agents import Context
 
+from ...observability import get_logger, log
+
+_log = get_logger("tools.relevance")
+
 
 def get_video_details_for_review(ctx: Context) -> dict:
     """Gather all video details and user requirements for relevance review.
@@ -117,10 +121,9 @@ def record_relevance_results(
     ctx.state["pending_summaries"] = {}
     ctx.state["pending_sentiments"] = {}
 
-    if relevant_videos:
-        print(f"[relevance_check] {len(relevant_videos)} relevant videos cached")
-    if rejected_ids:
-        print(f"[relevance_check] {len(rejected_ids)} videos rejected (retry {'needed' if retry_needed else 'not needed'}, attempt {retry_count}/3)")
+    log(_log, "relevance decided", relevant_total=len(relevant_videos), approved_now=len(relevant_video_ids),
+        rejected_now=len(rejected_ids), retry_needed=retry_needed, attempt=f"{retry_count}/3",
+        reasons=[f"{r.get('video_id')}: {str(r.get('reason', ''))[:80]}" for r in rejected_videos] or None)
 
     return {
         "relevant_count": len(relevant_videos),

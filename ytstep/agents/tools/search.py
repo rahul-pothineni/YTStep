@@ -1,8 +1,13 @@
+import logging
 import os
 import re
 
 import httpx
 from google.adk.agents import Context
+
+from ...observability import get_logger, log, timed
+
+_log = get_logger("tools.search")
 
 MIN_SUBSCRIBER_COUNT = 10_000
 MAX_DURATION_SECONDS = 2 * 60 * 60  # 2 hours
@@ -23,16 +28,18 @@ def _get_video_durations(api_key: str, video_ids: list[str]) -> dict[str, int]:
     """Fetch durations in seconds for a batch of video IDs."""
     if not video_ids:
         return {}
-    resp = httpx.get(
-        "https://www.googleapis.com/youtube/v3/videos",
-        params={
-            "part": "contentDetails",
-            "id": ",".join(video_ids),
-            "key": api_key,
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
+    with timed(_log, "youtube.videos", videos=len(video_ids)) as info:
+        resp = httpx.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={
+                "part": "contentDetails",
+                "id": ",".join(video_ids),
+            },
+            timeout=15,
+            headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
+        )
+        info["http_status"] = resp.status_code
+        resp.raise_for_status()
     durations = {}
     for item in resp.json().get("items", []):
         raw = item.get("contentDetails", {}).get("duration", "")
@@ -44,16 +51,18 @@ def _get_channel_subscribers(api_key: str, channel_ids: list[str]) -> dict[str, 
     """Fetch subscriber counts for a batch of channel IDs."""
     if not channel_ids:
         return {}
-    resp = httpx.get(
-        "https://www.googleapis.com/youtube/v3/channels",
-        params={
-            "part": "statistics",
-            "id": ",".join(channel_ids),
-            "key": api_key,
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
+    with timed(_log, "youtube.channels", channels=len(channel_ids)) as info:
+        resp = httpx.get(
+            "https://www.googleapis.com/youtube/v3/channels",
+            params={
+                "part": "statistics",
+                "id": ",".join(channel_ids),
+            },
+            timeout=15,
+            headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
+        )
+        info["http_status"] = resp.status_code
+        resp.raise_for_status()
     counts = {}
     for item in resp.json().get("items", []):
         stats = item.get("statistics", {})
@@ -85,6 +94,7 @@ def search_youtube(
     """
     api_key = os.environ.get("YOUTUBE_API_KEY", "")
     if not api_key or api_key == "YOUR_KEY_HERE":
+        log(_log, "YOUTUBE_API_KEY missing", logging.ERROR)
         return {"error": "YOUTUBE_API_KEY is not set in .env"}
 
     # Request more results than needed since some will be filtered out
@@ -95,17 +105,20 @@ def search_youtube(
         "q": search_query,
         "type": "video",
         "maxResults": fetch_count,
-        "key": api_key,
     }
 
     try:
-        resp = httpx.get(
-            "https://www.googleapis.com/youtube/v3/search",
-            params=params,
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        with timed(_log, "youtube.search", query=search_query) as info:
+            resp = httpx.get(
+                "https://www.googleapis.com/youtube/v3/search",
+                params=params,
+                timeout=15,
+                headers={"X-goog-api-key": api_key},  # header, not URL: keeps the key out of logs
+            )
+            info["http_status"] = resp.status_code
+            resp.raise_for_status()
+            data = resp.json()
+            info["results"] = len(data.get("items", []))
     except httpx.HTTPStatusError as e:
         return {"error": f"YouTube API error: {e.response.status_code} - {e.response.text}"}
     except httpx.RequestError as e:
@@ -173,5 +186,10 @@ def search_youtube(
         if len(videos) >= max_results:
             break
 
+    log(_log, "search filtered", found=len(data.get("items", [])), skipped_tried=len(tried_ids),
+        big_channels=len(sub_filtered), right_length=len(videos),
+        min_minutes=min_duration_minutes, max_minutes=max_duration_minutes)
+    if not videos:
+        log(_log, "search found no usable videos", logging.WARNING, query=search_query)
     ctx.state["search_results"] = videos
     return {"videos": videos, "count": len(videos)}

@@ -12,6 +12,9 @@ dependencies = [
     # Saved chats on Vercel (Postgres)
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.30.0",
+    # Traces of every chat → Langfuse (only used when LANGFUSE_* keys are set)
+    "langfuse>=5.2.0",
+    "openinference-instrumentation-google-adk>=1.1.6",
 ]
 
 [tool.pytest.ini_options]

@@ -50,6 +50,18 @@ The chat page deploys to Vercel as one Python function (`frontend/server.py`, se
 
 Only the routes the chat page needs are reachable on the deployed site (see the Gatekeeper in `frontend/server.py`).
 
+Optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (and `LANGFUSE_BASE_URL` outside the EU) send a trace of every chat to Langfuse.
+
+## Logs, Metrics and Traces
+
+Every message, agent turn, model call, tool call and YouTube/Gemini request is logged and timed. See [Metrics.md](Metrics.md) for what's measured and how to read it. Quick start:
+
+```bash
+python scripts/metrics_report.py          # failure rates + response times from chats on this computer
+python scripts/metrics_report.py --prod   # same for the live site (after `vercel env pull .env.local`)
+python scripts/langfuse_evals.py --help   # turn real chats into Langfuse datasets and replay them as evals
+```
+
 ## Testing One Agent at a Time
 
 `adk web` also lists each agent on its own, so you can try it without running the whole pipeline. Pick one from the app dropdown:
