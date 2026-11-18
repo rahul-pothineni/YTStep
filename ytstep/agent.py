@@ -1,6 +1,13 @@
-from google.adk.agents import Agent
+from .tracing import setup_tracing
 
-from .agents import (
+setup_tracing()  # before the agents load, so every step gets traced (Langfuse)
+
+from google.adk.agents import Agent  # noqa: E402
+from google.adk.apps import App  # noqa: E402
+
+from .observability import MetricsPlugin  # noqa: E402
+
+from .agents import (  # noqa: E402
     query_eval_agent,
     relevance_check_agent,
     search_agent,
@@ -45,10 +52,6 @@ videos than expected after retries, that's okay — just show what we found.
     ],
 )
 
-def main():
-   """Main execution function."""
-   pass
-
-
-if __name__ == "__main__":
-   main()
+# What `adk web` and the chat page run: the agents plus logging + metrics
+# for every message, agent, model call and tool call (see Metrics.md).
+app = App(name="ytstep", root_agent=root_agent, plugins=[MetricsPlugin()])

@@ -299,7 +299,9 @@ async function submit(text) {
   autosize();
 
   const progress = addProgress();
+  const started = performance.now();
   let replied = false;
+  let outcome = "no_answer", problemText = null;
   try {
     let title;
     if (!sessionId) {
@@ -317,10 +319,13 @@ async function submit(text) {
         replied = true;
       }
     }
-    if (!replied) addError("I didn't get an answer back that time.", text);
+    if (replied) outcome = "answered";
+    else addError("I didn't get an answer back that time.", text);
   } catch (err) {
     console.error(err);
     const offline = err instanceof TypeError;
+    outcome = offline ? "offline" : "error";
+    problemText = String(err?.message || err).slice(0, 300);
     addError(
       offline
         ? "I couldn't reach YTStep. Is the server still running?"
@@ -328,6 +333,7 @@ async function submit(text) {
       text,
     );
   } finally {
+    reportMessage(outcome, performance.now() - started, problemText);
     progress.el.remove();
     setBusy(false);
     if (sessionId) {
@@ -336,6 +342,18 @@ async function submit(text) {
     }
     input.focus();
   }
+}
+
+// Tells the server how the message went from the person's side (see Metrics.md).
+// Fire-and-forget: a failed report never shows up in the chat.
+function reportMessage(outcome, ms, error) {
+  const body = JSON.stringify({ session_id: sessionId, outcome, ms, error });
+  fetch("/api/client-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {});
 }
 
 function setBusy(value) {
