@@ -73,8 +73,25 @@ if DB_URL:
         "connect_args": {"ssl": "require", "statement_cache_size": 0},
     }
 
+def _site_origins() -> list[str] | None:
+    """The public addresses of this deployment, which ADK should trust.
+
+    Vercel passes requests to the app from inside the same machine, so without
+    this list ADK thinks it's a local dev server and refuses every page that
+    isn't on localhost ("origin not allowed"). Vercel tells each deployment its
+    own addresses; EXTRA_ORIGINS can add a custom domain (comma-separated).
+    """
+    if not ON_VERCEL:
+        return None  # locally ADK's default (allow localhost only) is right
+    hosts = [os.environ.get(k) for k in ("VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL", "VERCEL_BRANCH_URL")]
+    origins = [f"https://{h}" for h in hosts if h]
+    origins += [o.strip() for o in os.environ.get("EXTRA_ORIGINS", "").split(",") if o.strip()]
+    return origins
+
+
 # ADK's own API server (the same one behind `adk web`), without its dev UI.
 app = get_fast_api_app(
+    allow_origins=_site_origins(),
     agents_dir=str(REPO_ROOT),
     web=False,
     session_service_uri=DB_URL,
