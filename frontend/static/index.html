@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YTStep</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside id="sidebar" class="sidebar" aria-label="Your chats">
+    <a class="brand" href="./" aria-label="YTStep home">
+      <img class="mark" src="logo.svg" alt="">
+      <span class="wordmark">YTStep</span>
+    </a>
+    <button id="new-chat" class="new-chat" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+    <nav id="chat-list" class="chat-list"></nav>
+  </aside>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <div class="main">
+  <header class="topbar">
+    <button id="menu" class="icon-btn" type="button" aria-label="Show your chats" aria-controls="sidebar" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <a class="brand" href="./" aria-label="YTStep home">
+      <img class="mark" src="logo.svg" alt="">
+      <span class="wordmark">YTStep</span>
+    </a>
+  </header>
+
+  <main id="scroller" class="scroller">
+    <section id="lock" class="lock" hidden>
+      <h1>Enter the <em>passcode</em></h1>
+      <p>Ask whoever shared YTStep with you for the code.</p>
+      <form id="lock-form" class="lock-form">
+        <label for="lock-input" class="sr-only">Passcode</label>
+        <input id="lock-input" type="password" autocomplete="current-password" placeholder="Passcode" required>
+        <button class="send" type="submit" aria-label="Unlock">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 5.5 19.5 12 13 18.5"/></svg>
+        </button>
+      </form>
+      <p id="lock-error" class="lock-error" role="alert" hidden>That code didn't work. Try again.</p>
+    </section>
+    <section id="empty" class="empty">
+      <h1>What do you want to <em>watch</em>?</h1>
+      <p>Tell me what you're trying to learn. I'll find the right YouTube videos and tell you what's in them.</p>
+      <div class="chips">
+        <button class="chip" type="button">A 15-minute intro to stochastic calculus</button>
+        <button class="chip" type="button">Beginner yoga I can do in 20 minutes</button>
+        <button class="chip" type="button">How do Python decorators work?</button>
+      </div>
+    </section>
+    <div id="log" class="log" role="log" aria-live="polite"></div>
+  </main>
+
+  <footer class="dock">
+    <form id="composer" class="composer">
+      <label for="input" class="sr-only">Message YTStep</label>
+      <textarea id="input" rows="1" placeholder="Ask for a video…" autocomplete="off"></textarea>
+      <button id="send" class="send" type="submit" aria-label="Send" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+      </button>
+    </form>
+    <p class="hint">Enter to send · Shift + Enter for a new line</p>
+  </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

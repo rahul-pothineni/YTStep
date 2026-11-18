@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "frontend/server.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{tests/**,ytstep_query_eval/**,ytstep_search/**,ytstep_video_summarizer/**,ytstep_relevance_check/**,ytstep_testing.py,**/.adk/**,**/__pycache__/**,Notes.md}"
+    }
+  }
+}
