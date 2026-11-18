@@ -23,4 +23,4 @@ venv/
 .DS_Store
 .claude/settings.local.json
 .mcp.json
-ytstep/.adk/
+.adk/
