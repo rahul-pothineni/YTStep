@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 import httpx
 from google import genai
@@ -39,6 +40,78 @@ def _get_video_comments(api_key: str, video_id: str, max_comments: int = 50) -> 
         return []  # already logged by timed(); comments are optional
 
 
+VIDEO_MODEL = "gemini-3.5-flash"
+_YOUTUBE_ID = re.compile(r"(?:v=|youtu\.be/|/shorts/|/embed/)([\w-]{11})")
+
+
+def _watch(client, video_url: str, prompt: str) -> str:
+    """Has Gemini watch a YouTube video and answer `prompt` about it."""
+    interaction = client.interactions.create(
+        model=VIDEO_MODEL,
+        input=[
+            {"type": "video", "uri": video_url, "processing": "agentic"},
+            {"type": "text", "text": prompt},
+        ],
+    )
+    return interaction.output_text
+
+
+def _what_they_want(ctx: Context) -> str:
+    refined = ctx.state.get("refined_query") or {}
+    wishes = [refined.get("search_topic"), refined.get("video_type"), refined.get("additional_constraints")]
+    return ", ".join(w for w in wishes if w) or "learning about this topic"
+
+
+SUMMARY_PROMPT = """\
+Summarize this YouTube video for someone who wants: {wants}.
+
+Write:
+1. A few sentences on the main topics and what a viewer would learn.
+2. "Key moments:" followed by 3 to 6 bullet points, each starting with the exact
+   timestamp where that part begins (M:SS, or H:MM:SS past an hour), then a short
+   description. Pick the moments most useful for what this person wants.
+   Example: "- 4:12 Why regular calculus breaks down with randomness"
+
+Only use timestamps you actually saw in the video. Keep it plain and friendly."""
+
+MOMENTS_PROMPT = """\
+Watch this YouTube video and answer this question about it: {question}
+
+Give the exact timestamps (M:SS, or H:MM:SS past an hour) where the relevant parts
+start, as bullet points like "- 12:40 Where he starts solving the equation", with a
+one-line description each. If the video never covers it, say so plainly and name
+the closest part with its timestamp. Only use timestamps you actually saw."""
+
+
+def find_moments_in_video(ctx: Context, video_url: str, question: str) -> dict:
+    """Watches a YouTube video and finds the timestamps for what the person asks about.
+
+    Use this for follow-up questions about a video, like "where does he talk
+    about differential equations?" or "give me timestamps for the first video".
+
+    Args:
+        video_url: The YouTube link of the video (from the videos shown earlier).
+        question: What the person wants to find in the video, in their words.
+    """
+    match = _YOUTUBE_ID.search(video_url)
+    if not match:
+        return {"error": f"That doesn't look like a YouTube link: {video_url}"}
+    video_id = match.group(1)
+    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not google_api_key:
+        return {"error": "GOOGLE_API_KEY is not set in .env"}
+
+    client = genai.Client(api_key=google_api_key)
+    try:
+        with timed(_log, "gemini.find_moments", video_id=video_id, model=VIDEO_MODEL) as info:
+            answer = _watch(client, f"https://www.youtube.com/watch?v={video_id}",
+                            MOMENTS_PROMPT.format(question=question))
+            info["chars"] = len(answer or "")
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"Could not watch the video: {e}"}
+    return {"video_id": video_id, "video_url": f"https://www.youtube.com/watch?v={video_id}", "moments": answer}
+
+
 def summarize_all_videos(ctx: Context) -> dict:
     """Summarize all videos from search_results using the Gemini API.
 
@@ -71,28 +144,14 @@ def summarize_all_videos(ctx: Context) -> dict:
         return {"summaries": results, "cache_hits": len(results), "cache_misses": 0}
 
     client = genai.Client(api_key=google_api_key)
+    prompt = SUMMARY_PROMPT.format(wants=_what_they_want(ctx))
 
     def _summarize_one(video):
         try:
-            with timed(_log, "gemini.summarize_video", video_id=video["video_id"], model="gemini-3.5-flash") as info:
-                interaction = client.interactions.create(
-                    model="gemini-3.5-flash",
-                    input=[
-                        {
-                            "type": "video",
-                            "uri": video["url"],
-                            "processing": "agentic",
-                        },
-                        {
-                            "type": "text",
-                            "text": "Summarize this YouTube video. Focus on the main topics covered, "
-                            "key points, and what a viewer would learn from it. "
-                            "Keep it concise — a few sentences.",
-                        },
-                    ],
-                )
-                info["chars"] = len(interaction.output_text or "")
-                return interaction.output_text
+            with timed(_log, "gemini.summarize_video", video_id=video["video_id"], model=VIDEO_MODEL) as info:
+                summary = _watch(client, video["url"], prompt)
+                info["chars"] = len(summary or "")
+                return summary
         except Exception as e:
             return f"Could not summarize: {e}"
 

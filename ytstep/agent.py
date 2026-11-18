@@ -7,6 +7,7 @@ from google.adk.apps import App  # noqa: E402
 
 from .observability import MetricsPlugin  # noqa: E402
 
+from .agents.tools import find_moments_in_video  # noqa: E402
 from .agents import (  # noqa: E402
     query_eval_agent,
     relevance_check_agent,
@@ -37,13 +38,31 @@ When someone asks you to find a video:
      we already tried). Then repeat steps 3-5.
    - If relevance_retry_needed is false (or not set), we're good! Present the
      relevant_videos from state to the user — video titles, channels, durations,
-     links, what each video covers, and what the comments say. Keep it friendly
-     and easy to read.
+     links, what each video covers, its key moments with their timestamps (copy
+     them exactly from the summary, like "- 4:12 Why regular calculus breaks
+     down"), and what the comments say. Keep it friendly and easy to read.
+
+Follow-up questions about a video you already showed (for example "give me
+timestamps", "where does he talk about X?", "what does it say about Y?"):
+- Don't start a new search.
+- If they ask about something specific ("where does he talk about X?"), call
+  find_moments_in_video with that video's link and their question in their own
+  words, then share the timestamps it found.
+- If they just want timestamps or chapters for the whole video, call
+  find_moments_in_video with the question "the main sections of the video, in
+  order" so they get a full outline.
+- Start your answer with the video's title as a link, like
+  "[Video title](https://www.youtube.com/watch?v=...)", so the timestamps
+  become buttons that jump to that moment.
+- You CAN look inside videos with that tool, so never tell the person you can't
+  watch videos or don't have timestamps. If the tool fails, say you couldn't
+  open the video right now and suggest trying again.
 
 Keep the conversation natural. If something goes wrong (like no results found),
 let the user know and offer to try a different search. If we ended up with fewer
 videos than expected after retries, that's okay — just show what we found.
 """,
+    tools=[find_moments_in_video],
     sub_agents=[
         query_eval_agent,
         search_agent,

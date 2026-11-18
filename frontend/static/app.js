@@ -313,6 +313,10 @@ async function submit(text) {
       const problem = event.error_message || event.errorMessage;
       if (problem) throw new Error(problem);
       if (STEPS[event.author]) progress.step(event.author);
+      for (const part of event.content?.parts || []) {
+        const note = TOOL_NOTES[part.functionCall?.name];
+        if (note) progress.note(note);
+      }
       const reply = textOf(event);
       if (reply && SPEAKERS.has(event.author) && !event.partial) {
         addBot(reply, progress.el);
@@ -432,8 +436,16 @@ function addProgress() {
       bar.setAttribute("aria-valuetext", text);
       stickToBottom();
     },
+    // A status line for work outside the four steps (e.g. a follow-up question).
+    note(text) {
+      status.textContent = `${text}…`;
+      bar.setAttribute("aria-valuetext", text);
+    },
   };
 }
+
+// Tools the orchestrator runs itself, and what to tell the person meanwhile.
+const TOOL_NOTES = { find_moments_in_video: "Watching the video to find those moments" };
 
 function place(el, before = null) {
   empty.hidden = true;
@@ -452,7 +464,8 @@ function stickToBottom() {
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const VIDEO_ID = /(?:youtube\.com\/watch\?(?:[^\s)]*&)?v=|youtu\.be\/)([\w-]{11})/;
-const TIMESTAMP = /(^|[\s(\[])((?:\d{1,2}:)?\d{1,2}:\d{2})(?=$|[\s)\],.;:!?–-])/g;
+// "4:12", "(4:12)", "**4:12**" or "1:02:03"; bold is allowed because models often bold timestamps.
+const TIMESTAMP = /(^|[\s(\[*])((?:\d{1,2}:)?\d{1,2}:\d{2})(?=$|[\s)\],.;:!?–*-])/g;
 
 function toSeconds(ts) {
   return ts.split(":").reduce((total, part) => total * 60 + Number(part), 0);

@@ -77,3 +77,9 @@ This /goal created a self-verifying loop: write evals → swap each rule out →
 - **Defensive checks for coupled rules.** Some evals depend on upstream behavior (e.g. duration checks need the tool to be called first). When a non-target check can't run, return PASS instead of a false FAIL.
 - **Check on long-running tasks.** A validation script ran 40+ min before we realized the approach was wrong. The fix took 2 min. Rule: if a background task shows no progress after 15 min, analyze whether the approach itself is flawed and pivot.
 
+
+Problem: YTStep never gave timestamps, and on follow-ups ("where does he talk about differential equations?") the orchestrator said it couldn't watch videos.
+
+Root Cause: Gemini already watches every video in `summarize_all_videos`, but the prompt only asked for "a few sentences", so no timestamps were ever produced. Follow-up questions had no tool, so the orchestrator could only reread the short summary.
+
+Solution: The summary prompt now asks for "Key moments" with exact timestamps, picked for what the person asked for (from `refined_query`), and the orchestrator shows them. For follow-ups, the orchestrator has a `find_moments_in_video(video_url, question)` tool that has Gemini watch the video again and return timestamps for the question. "Just give me timestamps" uses the question "the main sections of the video, in order". The page turns `M:SS` into buttons that jump to that moment (bolded timestamps included), and shows "Watching the video to find those moments…" while the tool runs (~10–15 s).
