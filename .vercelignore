@@ -16,3 +16,5 @@ ytstep_relevance_check/
 ytstep_testing.py
 __pycache__/
 .venv/
+.adk_env/
+.pytest_cache/
