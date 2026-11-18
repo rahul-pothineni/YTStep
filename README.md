@@ -1,7 +1,7 @@
 # About:
 Currently a work in progress.
 
-Live Demo: [https://ytstep.vercel.app](url)
+Live Demo: [https://ytstep.vercel.app](https://ytstep.vercel.app)
 
 Check out the [Notes.md](Notes.md) file for more information about the motivation.
 
