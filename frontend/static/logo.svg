@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 46" role="img" aria-label="YTStep">
+  <!-- antenna -->
+  <line x1="24" y1="11" x2="24" y2="5.5" stroke="#c4002a" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="24" cy="4.5" r="4" fill="#ff0033"/>
+  <!-- ears -->
+  <rect x="0" y="19" width="6.5" height="14" rx="2.5" fill="#c4002a"/>
+  <rect x="41.5" y="19" width="6.5" height="14" rx="2.5" fill="#c4002a"/>
+  <!-- head: the play button -->
+  <rect x="3" y="11" width="42" height="32" rx="11" fill="#ff0033"/>
+  <!-- eyes -->
+  <circle cx="14" cy="19.5" r="2.6" fill="#fff"/>
+  <circle cx="34" cy="19.5" r="2.6" fill="#fff"/>
+  <!-- mouth: the play triangle turned to point down -->
+  <path d="M16.5 26h15l-7.5 10z" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+</svg>

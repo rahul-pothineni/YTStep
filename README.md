@@ -28,6 +28,28 @@ Check out the [Notes.md](Notes.md) file for more information about the motivatio
 
 4. Open the URL shown in the terminal and start chatting with the agent.
 
+## Chat Page
+
+A simple chat page for using YTStep (no developer tools needed):
+
+```bash
+python frontend/server.py
+```
+
+Then open http://127.0.0.1:8080. Each browser keeps its own chat history. Clearing the browser's cache or cookies starts fresh.
+
+### Deploying to Vercel
+
+The chat page deploys to Vercel as one Python function (`frontend/server.py`, set in `pyproject.toml`). The project needs these environment variables:
+
+| Variable | What it's for |
+|---|---|
+| `GOOGLE_API_KEY`, `YOUTUBE_API_KEY` | The agents' keys |
+| `DATABASE_URL` | Saved chats. Added automatically when you connect a Neon Postgres database in Vercel (Storage → Neon) |
+| `APP_PASSCODE` | The code people type before they can chat. Leave unset for no passcode screen |
+
+Only the routes the chat page needs are reachable on the deployed site (see the Gatekeeper in `frontend/server.py`).
+
 ## Testing One Agent at a Time
 
 `adk web` also lists each agent on its own, so you can try it without running the whole pipeline. Pick one from the app dropdown:

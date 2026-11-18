@@ -1,0 +1,20 @@
+# Never upload secrets or local chat history (matters for `vercel deploy` from
+# this computer; Git deploys only see committed files anyway).
+.env
+.env.*
+*.env
+**/.adk/
+.mcp.json
+.claude/
+
+# Not needed to run the site
+tests/
+ytstep_query_eval/
+ytstep_search/
+ytstep_video_summarizer/
+ytstep_relevance_check/
+ytstep_testing.py
+__pycache__/
+.venv/
+.adk_env/
+.pytest_cache/
