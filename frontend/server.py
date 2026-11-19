@@ -29,6 +29,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 import uvicorn
 from dotenv import load_dotenv
@@ -187,6 +188,125 @@ async def cache_key() -> JSONResponse:
     )
 
 
+# ---------- Visits: who opened the page (one log line when it opens, one when it closes) ----------
+# Location comes from headers Vercel adds to every request; the browser sends the
+# rest. The IP address is never logged, only a daily-changing hash of it (like
+# Vercel Analytics), so a visitor can be counted without being identified.
+
+class Visit(BaseModel):
+    phase: str  # "start" | "end"
+    visitor: str | None = None  # random id this browser keeps in its storage
+    returning: bool | None = None
+    unlocked: bool | None = None
+    page: str | None = None
+    referrer: str | None = None
+    language: str | None = None
+    languages: list[str] | None = None
+    timezone: str | None = None
+    screen: str | None = None
+    viewport: str | None = None
+    pixel_ratio: float | None = None
+    touch: bool | None = None
+    dark_mode: bool | None = None
+    connection: str | None = None
+    seconds: float | None = None
+    messages: int | None = None
+    chats_opened: int | None = None
+
+
+def _browser(ua: str) -> dict:
+    """Rough browser / OS / device from the user-agent text. Good enough for counting."""
+    def find(pairs):
+        for name, pattern in pairs:
+            m = re.search(pattern, ua)
+            if m:
+                return f"{name} {m.group(1)}".strip() if m.groups() else name
+        return "other"
+
+    browser = find([("Edge", r"Edg/(\d+)"), ("Opera", r"OPR/(\d+)"), ("Samsung Internet", r"SamsungBrowser/(\d+)"),
+                    ("Firefox", r"Firefox/(\d+)"), ("Chrome", r"(?:Chrome|CriOS)/(\d+)"),
+                    ("Safari", r"Version/(\d+)[\d.]* .*Safari")])
+    os_name = find([("iOS", r"(?:iPhone|iPad).*? OS (\d+)"), ("Android", r"Android (\d+)"),
+                    ("Windows", r"Windows NT ([\d.]+)"), ("macOS", r"Mac OS X ([\d_]+)"),
+                    ("ChromeOS", r"CrOS"), ("Linux", r"Linux")]).replace("_", ".")
+    device = "bot" if re.search(r"bot|crawl|spider|preview", ua, re.I) else (
+        "tablet" if re.search(r"iPad|Tablet", ua) else "mobile" if re.search(r"Mobi|iPhone|Android", ua) else "desktop")
+    return {"browser": browser, "os": os_name, "device": device}
+
+
+def _clip(value, n=120):
+    return value[:n] if isinstance(value, str) else value
+
+
+@app.post("/api/visit")
+async def visit(info: Visit, request: Request) -> dict:
+    h = request.headers
+    ip = (h.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    visitor_hash = hashlib.sha256(f"{day}|{ip}|{h.get('user-agent', '')}|{PASSCODE}".encode()).hexdigest()[:12]
+    city = h.get("x-vercel-ip-city")
+    fields = {
+        "phase": "end" if info.phase == "end" else "start",
+        "visitor": _clip(info.visitor, 32), "visitor_hash": visitor_hash, "returning": info.returning,
+        "unlocked": info.unlocked,
+        "country": h.get("x-vercel-ip-country"), "region": h.get("x-vercel-ip-country-region"),
+        "city": unquote(city) if city else None,
+        **_browser(h.get("user-agent", "")),
+        "user_agent": _clip(h.get("user-agent"), 300),
+        "page": _clip(info.page), "referrer": _clip(info.referrer, 300),
+        "language": _clip(info.language, 20), "languages": [_clip(x, 20) for x in (info.languages or [])[:5]] or None,
+        "timezone": _clip(info.timezone, 60),
+        "screen": _clip(info.screen, 20), "viewport": _clip(info.viewport, 20), "pixel_ratio": info.pixel_ratio,
+        "touch": info.touch, "dark_mode": info.dark_mode, "connection": _clip(info.connection, 10),
+    }
+    if fields["phase"] == "end":
+        fields.update(seconds=info.seconds and round(info.seconds, 1), messages=info.messages,
+                      chats_opened=info.chats_opened, bounced=not info.messages)
+    # Printed as-is (not JSON) so it reads nicely in Vercel → Logs. Search "👋 Visit" to find them.
+    print(_visit_card(fields), flush=True)
+    return {"ok": True}
+
+
+def _visit_card(f: dict) -> str:
+    """The visit as a few readable lines with emojis."""
+    def join(*parts):
+        return " · ".join(p for p in parts if p)
+
+    def duration(sec):
+        sec = int(sec or 0)
+        return f"{sec // 60}m {sec % 60}s" if sec >= 60 else f"{sec}s"
+
+    def plural(n, word):
+        return f"{n} {word}{'' if n == 1 else 's'}"
+
+    referrer = f.get("referrer")
+    source = re.sub(r"^https?://(www\.)?|/.*$", "", referrer) if referrer else None
+    device_icon = {"mobile": "📱", "tablet": "📱", "bot": "🤖"}.get(f["device"], "💻")
+    ratio = f.get("pixel_ratio")
+    screen = f.get("screen", "").replace("x", "×") + (f" @{ratio:g}x" if ratio and ratio != 1 else "") if f.get("screen") else None
+
+    if f["phase"] == "start":
+        title = join("👋 Visit started", "🔁 returning visitor" if f.get("returning") else "✨ new visitor",
+                     "🔓 unlocked" if f.get("unlocked") else "🔒 at the passcode screen")
+    else:
+        messages = f.get("messages") or 0
+        title = join("👋 Visit ended", f"⏱️ {duration(f.get('seconds'))}",
+                     f"💬 {plural(messages, 'message')}" if messages else "🚪 left without sending a message",
+                     f"📂 {plural(f['chats_opened'], 'past chat')} opened" if f.get("chats_opened") else None)
+    place = ", ".join(x for x in (f.get("city"), f.get("region"), f.get("country")) if x)
+    lines = [
+        title,
+        join(f"📍 {place}" if place else "📍 unknown location", f"🕐 {f['timezone']}" if f.get("timezone") else None),
+        join(f"{device_icon} {f['browser']} on {f['os']} ({f['device']})", f"🖥️ {screen}" if screen else None,
+             "🌙 dark mode" if f.get("dark_mode") else ("☀️ light mode" if f.get("dark_mode") is False else None),
+             "👆 touch" if f.get("touch") else None, f"📶 {f['connection']}" if f.get("connection") else None),
+        join(f"🌐 {f['language']}" if f.get("language") else None,
+             f"🔗 from {source}" if source else "🔗 typed in / bookmark", f"📄 {f['page']}" if f.get("page") else None),
+        join(f"🆔 {f['visitor'][:8]}" if f.get("visitor") else None, f"#️⃣ {f['visitor_hash'][:8]}"),
+    ]
+    return "\n".join(lines)
+
+
 # ---------- What the person saw, reported by the page ----------
 # The server can't see everything: a dropped connection, Vercel's 5-minute
 # limit cutting a search off, or the browser losing its network. The page
@@ -219,7 +339,8 @@ async def client_log(report: PageReport) -> dict:
 # memory, ...). On a public address those would let anyone run any agent on our
 # API keys, so everything not listed here gets a 404.
 
-OPEN = {("GET", "/api/unlock"), ("POST", "/api/unlock"), ("GET", "/api/cache-key"), ("GET", "/health")}
+OPEN = {("GET", "/api/unlock"), ("POST", "/api/unlock"), ("GET", "/api/cache-key"), ("GET", "/health"),
+        ("POST", "/api/visit")}  # visits count before the passcode too
 SESSIONS = re.compile(rf"^/apps/{APP_NAME}/users/browser-[\w-]{{1,80}}/sessions(/[\w-]{{1,80}})?$")
 
 

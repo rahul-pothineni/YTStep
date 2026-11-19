@@ -71,6 +71,49 @@ async function api(path, options = {}) {
 // Only shows when the server has a passcode set (APP_PASSCODE). The server
 // remembers a correct code with a cookie, so it's asked for once per browser.
 
+// ---------- Visit log: one report when the page opens, one when it closes ----------
+// Sent to /api/visit, which adds location (from Vercel) and logs it. No IP is kept.
+const visitStats = { opened: performance.now(), messages: 0, chats: 0, unlocked: false, ended: false };
+const returningVisitor = localStorage.getItem(STORAGE_KEY) !== null; // checked before browserId() creates it
+
+function visitInfo() {
+  const conn = navigator.connection;
+  return {
+    visitor: (localStorage.getItem(STORAGE_KEY) || "").slice(0, 16) || null,
+    returning: returningVisitor,
+    unlocked: visitStats.unlocked,
+    page: location.pathname + location.search,
+    referrer: document.referrer || null,
+    language: navigator.language,
+    languages: [...(navigator.languages || [])].slice(0, 5),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${screen.width}x${screen.height}`,
+    viewport: `${innerWidth}x${innerHeight}`,
+    pixel_ratio: devicePixelRatio,
+    touch: navigator.maxTouchPoints > 0,
+    dark_mode: matchMedia("(prefers-color-scheme: dark)").matches,
+    connection: conn ? conn.effectiveType : null,
+  };
+}
+
+function reportVisit(phase) {
+  const body = { phase, ...visitInfo() };
+  if (phase === "end") {
+    if (visitStats.ended) return;
+    visitStats.ended = true;
+    Object.assign(body, { seconds: (performance.now() - visitStats.opened) / 1000,
+                          messages: visitStats.messages, chats_opened: visitStats.chats });
+  }
+  const blob = new Blob([JSON.stringify(body)], { type: "application/json" });
+  if (!(navigator.sendBeacon && navigator.sendBeacon("/api/visit", blob))) {
+    fetch("/api/visit", { method: "POST", body: blob, keepalive: true,
+                          headers: { "Content-Type": "application/json" } }).catch(() => {});
+  }
+}
+
+reportVisit("start");
+addEventListener("pagehide", () => reportVisit("end"));
+
 async function unlockIfNeeded() {
   const { locked } = await (await fetch("/api/unlock")).json();
   if (!locked) return;
@@ -129,6 +172,7 @@ async function newSession(title) {
 const getSession = async (id) => (await api(`/apps/${APP}/users/${USER}/sessions/${id}`)).json();
 
 async function openChat(id) {
+  visitStats.chats += 1;
   if (busy) return;
   const session = await getSession(id);
   sessionId = id;
@@ -338,6 +382,7 @@ async function submit(text) {
     );
   } finally {
     reportMessage(outcome, performance.now() - started, problemText);
+    visitStats.messages += 1;
     progress.el.remove();
     setBusy(false);
     if (sessionId) {
@@ -592,6 +637,7 @@ $("new-chat").addEventListener("click", () => {
 });
 
 unlockIfNeeded()
+  .then(() => { visitStats.unlocked = true; })
   .then(browserId)
   .then((id) => {
     USER = id;
